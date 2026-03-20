@@ -18,6 +18,9 @@ html {
 }
 
 body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   margin: 0;
   color: var(--ink);
   background:
@@ -29,6 +32,10 @@ body {
 
 .container {
   max-width: 1160px;
+}
+
+main[role="main"] {
+  min-width: 0;
 }
 
 .site-nav {
@@ -95,6 +102,9 @@ body {
   display: block;
   color: var(--muted);
   margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.78rem;
 }
 
 .layout-grid {
@@ -136,12 +146,60 @@ body {
 }
 
 .btn-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
   border: 0;
   border-radius: 999px;
   padding: 0.78rem 1.25rem;
   color: white;
   font-weight: 700;
   background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  min-width: 132px;
+}
+
+.btn-check:disabled {
+  opacity: 0.9;
+}
+
+.btn-loading {
+  display: none;
+}
+
+.btn-loading::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: white;
+  border-radius: 999px;
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+
+.btn-check.is-loading .btn-text {
+  display: none;
+}
+
+.btn-check.is-loading .btn-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.submit-status {
+  display: none;
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--blue);
+  font-weight: 600;
+}
+
+body.is-submitting .submit-status {
+  display: block;
 }
 
 .summary-head {
@@ -168,6 +226,7 @@ body {
   display: block;
   font-size: 1.2rem;
   margin-top: 0.3rem;
+  overflow-wrap: anywhere;
 }
 
 .metric-label {
@@ -177,6 +236,7 @@ body {
 
 .route-panel {
   margin-bottom: 1.5rem;
+  overflow: hidden;
 }
 
 .hop-list {
@@ -187,6 +247,7 @@ body {
 .hop-card {
   border-radius: 20px;
   padding: 1rem;
+  max-width: 100%;
 }
 
 .hop-timeout {
@@ -203,13 +264,16 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  align-items: center;
+  align-items: flex-start;
+  min-width: 0;
 }
 
 .hop-id {
   display: flex;
   gap: 0.9rem;
   align-items: flex-start;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .hop-index {
@@ -229,13 +293,45 @@ body {
   font-size: 1.04rem;
 }
 
+.hop-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 .hop-id p,
 .hop-metrics span {
   margin: 0.2rem 0 0;
   color: var(--muted);
 }
 
+.hop-subline {
+  font-size: 0.92rem;
+}
+
+.hop-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.22rem 0.65rem;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.hop-id h3,
+.hop-id p,
+.hop-metrics,
+.hop-metrics span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .hop-metrics {
+  flex: 0 0 170px;
+  max-width: 170px;
   text-align: right;
 }
 
@@ -267,7 +363,14 @@ body {
 }
 
 .footer {
+  margin-top: auto;
   padding: 1rem 0 1.8rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 920px) {
@@ -283,6 +386,8 @@ body {
   }
 
   .hop-metrics {
+    flex: 1 1 auto;
+    max-width: none;
     text-align: left;
   }
 }

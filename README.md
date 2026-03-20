@@ -9,7 +9,8 @@
 - 輸入網域或 IP 做路徑分析
 - 先做 `ping` 取得基本延遲與封包遺失
 - 再跑 `tracert` 顯示每一跳的延遲
-- 簡單標示疑似 latency spike 的 hop
+- 標示疑似 latency spike 的 hop
+- 對 public hop 補上 PTR、地區、ASN 與 ISP 資訊
 - 用 bar 視覺化每一跳延遲
 
 ## 使用方式
@@ -30,6 +31,7 @@ dotnet run
 - ASP.NET Core Razor Pages
 - `System.Net.NetworkInformation.Ping`
 - Windows `tracert` 指令輸出解析
+- `ipwho.is` 的公開 HTTPS API 做 IP 地理資訊補充
 
 ## 目前限制
 

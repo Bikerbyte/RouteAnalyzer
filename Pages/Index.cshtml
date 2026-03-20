@@ -7,41 +7,48 @@
 <section class="hero-panel">
     <div class="hero-copy">
         <p class="eyebrow">Route Analyzer</p>
-        <h1>網路延遲忽然變糟時，先看是哪一段開始壞掉。</h1>
+        <h1>Network route diagnostics for unstable latency.</h1>
         <p class="hero-text">
-            這個工具把 <code>ping</code> 和 <code>tracert</code> 整理成比較容易判讀的畫面。
-            重點不是做完整網路監控，而是讓你快速知道延遲是整體都高，還是從某一跳之後才突然升上去。
+            輸入目標主機後，系統會執行 <code>ping</code> 與 <code>tracert</code>，
+            協助你快速判斷延遲是否從某一跳開始明顯升高，並補上該 hop 所在網段類型、PTR 與地理資訊。
         </p>
     </div>
     <div class="hero-note">
-        <span>目前版本</span>
-        <strong>Windows 專用，適合家用網路與一般線路排查</strong>
+        <span>Current scope</span>
+        <strong>Windows host diagnostics, focused on single-run route analysis</strong>
     </div>
 </section>
 
 <section class="layout-grid">
     <div class="panel control-panel">
-        <h2>測試設定</h2>
-        <p>可以輸入網站、伺服器網域、IP，或你懷疑有問題的目標站點。</p>
+        <h2>Run analysis</h2>
+        <p>支援輸入完整網址、網域或 IP。若輸入網址，系統會自動取 host 後再做 ping / tracert。</p>
 
-        <form method="post">
+        <form method="post" id="analyze-form">
             <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
 
             <label asp-for="TargetHost" class="field-label">目標主機</label>
-            <input asp-for="TargetHost" class="text-input" placeholder="例如 1.1.1.1 或 example.com" />
+            <input asp-for="TargetHost" class="text-input" placeholder="例如 1.1.1.1 或 https://example.com/path" />
 
             <label asp-for="PingCount" class="field-label">Ping 次數</label>
             <input asp-for="PingCount" class="text-input" type="number" min="3" max="10" />
 
             <div class="action-row">
-                <button type="submit" class="btn-check">開始分析</button>
+                <button type="submit" class="btn-check" id="analyze-button">
+                    <span class="btn-text">開始分析</span>
+                    <span class="btn-loading" aria-hidden="true">分析中...</span>
+                </button>
+            </div>
+
+            <div class="submit-status" id="submit-status" aria-live="polite">
+                正在執行 ping 與 tracert，請稍候。
             </div>
         </form>
     </div>
 
     <div class="panel summary-panel">
         <div class="summary-head">
-            <h2>診斷摘要</h2>
+            <h2>Summary</h2>
             @if (Model.Report is not null)
             {
                 <span>@Model.Report.TargetHost</span>
@@ -51,27 +58,27 @@
         @if (Model.Report is null)
         {
             <div class="empty-state">
-                <p>尚未執行分析。</p>
+                <p>尚未執行分析。填入目標主機後按下開始分析。</p>
             </div>
         }
         else
         {
             <div class="summary-grid">
                 <article class="metric-card">
-                    <span class="metric-label">平均 Ping</span>
+                    <span class="metric-label">Average ping</span>
                     <strong>@(Model.Report.PingSummary.AverageRoundTripMs?.ToString() ?? "-") ms</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">封包遺失</span>
+                    <span class="metric-label">Packet loss</span>
                     <strong>@Model.Report.PingSummary.PacketLossPercent%</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">最高 Hop 延遲</span>
+                    <span class="metric-label">Max hop latency</span>
                     <strong>@(Model.Report.Hops.Where(static hop => hop.AverageLatencyMs.HasValue).Select(static hop => hop.AverageLatencyMs!.Value).DefaultIfEmpty().Max()) ms</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">疑似瓶頸</span>
-                    <strong>@(Model.Report.SuspectedIssue ?? "暫時看不出明顯瓶頸")</strong>
+                    <span class="metric-label">Likely bottleneck</span>
+                    <strong>@(Model.Report.SuspectedIssue ?? "未觀察到明顯瓶頸")</strong>
                 </article>
             </div>
 
@@ -82,7 +89,7 @@
 
 <section class="panel route-panel">
     <div class="summary-head">
-        <h2>路徑可視化</h2>
+        <h2>Hop timeline</h2>
         @if (Model.Report is not null)
         {
             <span>@Model.Report.Hops.Count 跳</span>
@@ -105,12 +112,33 @@
                         <div class="hop-id">
                             <span class="hop-index">@hop.HopNumber</span>
                             <div>
-                                <h3>@hop.DisplayAddress</h3>
-                                <p>@hop.Note</p>
+                                <div class="hop-headline">
+                                    <h3>@hop.DisplayAddress</h3>
+                                    <span class="hop-badge">@hop.ScopeLabel</span>
+                                </div>
+                                <p>@hop.ScopeDetail</p>
+                                @if (!string.IsNullOrWhiteSpace(hop.ReverseDns))
+                                {
+                                    <p class="hop-subline">PTR: @hop.ReverseDns</p>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Summary))
+                                {
+                                    <p class="hop-subline">Location: @hop.GeoDetails!.Summary</p>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Isp) || !string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn))
+                                {
+                                    <p class="hop-subline">Network: @hop.GeoDetails?.Isp @(string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn) ? "" : $"(AS{hop.GeoDetails?.Asn})")</p>
+                                }
+                                <p class="hop-subline">@hop.Note</p>
                             </div>
                         </div>
                         <div class="hop-metrics">
                             <strong>@(hop.AverageLatencyMs?.ToString() ?? "*") ms</strong>
+                            <span>Δ @(hop.LatencyDeltaMs?.ToString() ?? "-") ms</span>
+                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Timezone))
+                            {
+                                <span>@hop.GeoDetails!.Timezone</span>
+                            }
                             <span>@string.Join(" / ", hop.Samples)</span>
                         </div>
                     </div>
@@ -122,3 +150,22 @@
         </div>
     }
 </section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const form = document.getElementById("analyze-form");
+            const button = document.getElementById("analyze-button");
+
+            if (!form || !button) {
+                return;
+            }
+
+            form.addEventListener("submit", () => {
+                button.disabled = true;
+                button.classList.add("is-loading");
+                document.body.classList.add("is-submitting");
+            });
+        })();
+    </script>
+}

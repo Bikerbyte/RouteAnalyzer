@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -8,6 +9,13 @@ namespace RouteAnalyzer.Services;
 
 public partial class NetworkRouteDiagnosticService
 {
+    private readonly IpGeoLookupService _ipGeoLookupService;
+
+    public NetworkRouteDiagnosticService(IpGeoLookupService ipGeoLookupService)
+    {
+        _ipGeoLookupService = ipGeoLookupService;
+    }
+
     public async Task<RouteDiagnosticReport> AnalyzeAsync(string targetHost, int pingCount, CancellationToken cancellationToken)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -22,7 +30,7 @@ public partial class NetworkRouteDiagnosticService
                     PacketLossPercent = 100
                 },
                 Hops = [],
-                Narrative = "目前只支援 Windows，因為這版是直接解析 tracert 輸出。",
+                Narrative = "目前只支援 Windows，因為這版直接解析 tracert 輸出。",
                 SuspectedIssue = "作業系統不支援",
                 RawTracerouteLines = []
             };
@@ -30,7 +38,7 @@ public partial class NetworkRouteDiagnosticService
 
         var pingSummary = await RunPingAsync(targetHost, pingCount);
         var tracerouteLines = await RunCommandLinesAsync("tracert", $"-d -w 900 {targetHost}", cancellationToken);
-        var hops = ParseTraceroute(tracerouteLines);
+        var hops = await ParseTracerouteAsync(targetHost, tracerouteLines, cancellationToken);
         var suspectedIssue = FindSuspectedIssue(hops, pingSummary);
 
         return new RouteDiagnosticReport
@@ -61,7 +69,7 @@ public partial class NetworkRouteDiagnosticService
             }
             catch
             {
-                // Keep the tool forgiving. Failures count toward packet loss.
+                // Keep the diagnostic flow forgiving. Failures count toward packet loss.
             }
         }
 
@@ -103,14 +111,13 @@ public partial class NetworkRouteDiagnosticService
 
         var output = await outputTask;
         var error = await errorTask;
-        var lines = (output + Environment.NewLine + error)
+
+        return (output + Environment.NewLine + error)
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
-
-        return lines;
     }
 
-    private static IReadOnlyList<RouteHop> ParseTraceroute(IReadOnlyList<string> lines)
+    private async Task<IReadOnlyList<RouteHop>> ParseTracerouteAsync(string targetHost, IReadOnlyList<string> lines, CancellationToken cancellationToken)
     {
         var hops = new List<RouteHop>();
         RouteHop? previous = null;
@@ -131,24 +138,29 @@ public partial class NetworkRouteDiagnosticService
                 match.Groups["s3"].Value
             };
 
-            var parsedSamples = samples
-                .Select(ParseLatency)
-                .ToList();
-
+            var parsedSamples = samples.Select(ParseLatency).ToList();
             var address = match.Groups["addr"].Value.Trim();
             var isTimeout = parsedSamples.All(static value => !value.HasValue);
-            var avg = parsedSamples.Where(static value => value.HasValue).Select(static value => value!.Value).DefaultIfEmpty().ToList();
-            var averageLatency = parsedSamples.Any(static value => value.HasValue) ? (int?)Math.Round(avg.Average()) : null;
+            var averageLatency = parsedSamples.Any(static value => value.HasValue)
+                ? (int?)Math.Round(parsedSamples.Where(static value => value.HasValue).Average(static value => value!.Value))
+                : null;
 
-            var suspectedSpike = previous?.AverageLatencyMs is int previousAverage
-                && averageLatency is int currentAverage
-                && currentAverage - previousAverage >= 25;
+            var latencyDelta = previous?.AverageLatencyMs is int previousAverage && averageLatency is int currentAverage
+                ? (int?)(currentAverage - previousAverage)
+                : null;
+
+            var suspectedSpike = latencyDelta is int delta && delta >= 25;
+            var reverseDns = await ResolveReverseDnsAsync(address, cancellationToken);
+            var geoDetails = !isTimeout && IPAddress.TryParse(address, out var parsedIp) && !IsPrivateAddress(parsedIp)
+                ? await _ipGeoLookupService.LookupAsync(address, cancellationToken)
+                : null;
+            var (scopeLabel, scopeDetail) = DescribeHop(targetHost, hopNumber, address, isTimeout, reverseDns);
 
             var note = isTimeout
-                ? "這一跳沒有回應，可能被防火牆或路由設備忽略。"
+                ? "該 hop 沒有回應 ICMP，未必代表真正故障。"
                 : suspectedSpike
-                    ? $"從上一跳增加了 {averageLatency - previous!.AverageLatencyMs!.Value} ms，值得注意。"
-                    : "看起來還算平穩。";
+                    ? $"相較上一跳增加 {latencyDelta} ms，值得注意。"
+                    : "目前沒有看到異常跳升。";
 
             var hop = new RouteHop
             {
@@ -156,8 +168,13 @@ public partial class NetworkRouteDiagnosticService
                 DisplayAddress = string.IsNullOrWhiteSpace(address) ? "(unknown)" : address,
                 Samples = samples,
                 AverageLatencyMs = averageLatency,
+                LatencyDeltaMs = latencyDelta,
                 IsTimeout = isTimeout,
                 SuspectedSpike = suspectedSpike,
+                ScopeLabel = scopeLabel,
+                ScopeDetail = scopeDetail,
+                ReverseDns = reverseDns,
+                GeoDetails = geoDetails,
                 Note = note
             };
 
@@ -166,6 +183,67 @@ public partial class NetworkRouteDiagnosticService
         }
 
         return hops;
+    }
+
+    private static async Task<string?> ResolveReverseDnsAsync(string address, CancellationToken cancellationToken)
+    {
+        if (!IPAddress.TryParse(address, out var ipAddress))
+        {
+            return null;
+        }
+
+        try
+        {
+            var entry = await Dns.GetHostEntryAsync(ipAddress).WaitAsync(TimeSpan.FromMilliseconds(700), cancellationToken);
+            return string.Equals(entry.HostName, address, StringComparison.OrdinalIgnoreCase) ? null : entry.HostName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static (string Label, string Detail) DescribeHop(string targetHost, int hopNumber, string address, bool isTimeout, string? reverseDns)
+    {
+        if (isTimeout)
+        {
+            return ("No reply", "該 hop 沒有回覆 ICMP。");
+        }
+
+        if (IPAddress.TryParse(address, out var ipAddress) && IsPrivateAddress(ipAddress))
+        {
+            return hopNumber == 1
+                ? ("LAN / Gateway", "通常是本機路由器或第一層閘道。")
+                : ("Private network", "仍在私有網段內，可能是內網或 ISP 前段設備。");
+        }
+
+        if (!string.IsNullOrWhiteSpace(reverseDns))
+        {
+            return ("Public hop", $"PTR: {reverseDns}");
+        }
+
+        if (string.Equals(address, targetHost, StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Destination", "這一跳看起來就是目標主機。");
+        }
+
+        return hopNumber <= 2
+            ? ("Access / ISP edge", "通常靠近本地網路或 ISP 接入邊界。")
+            : ("Transit hop", "中途公網節點，可能是骨幹或上游網路。");
+    }
+
+    private static bool IsPrivateAddress(IPAddress ipAddress)
+    {
+        var bytes = ipAddress.GetAddressBytes();
+        return bytes.Length == 4
+               && (bytes[0], bytes[1]) switch
+               {
+                   (10, _) => true,
+                   (172, >= 16 and <= 31) => true,
+                   (192, 168) => true,
+                   (100, >= 64 and <= 127) => true,
+                   _ => false
+               };
     }
 
     private static string? FindSuspectedIssue(IReadOnlyList<RouteHop> hops, PingSummary pingSummary)
@@ -178,12 +256,12 @@ public partial class NetworkRouteDiagnosticService
 
         if (pingSummary.PacketLossPercent >= 25)
         {
-            return "封包遺失偏高，可能是整體連線品質不穩";
+            return "封包遺失偏高，整體連線品質不穩";
         }
 
         if (hops.Any(static hop => hop.IsTimeout))
         {
-            return "途中有 timeout，但不一定代表真的故障";
+            return "途中有 timeout，但未必就是故障點";
         }
 
         return null;
@@ -198,10 +276,10 @@ public partial class NetworkRouteDiagnosticService
 
         if (!string.IsNullOrWhiteSpace(suspectedIssue))
         {
-            return $"整體平均 ping 約 {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，{suspectedIssue}。建議先比對不同時段再看是否穩定重現。";
+            return $"平均 ping 約 {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，{suspectedIssue}。建議比對不同時段結果，確認是否穩定重現。";
         }
 
-        return $"平均 ping 約 {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，路徑沒有看到特別突兀的延遲跳升。若連線仍不穩，問題可能更偏即時流量波動或目標端。";
+        return $"平均 ping 約 {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，路徑沒有看到明顯的延遲跳升。若連線仍不穩，問題可能更偏即時流量波動或目標端。";
     }
 
     private static int? ParseLatency(string value)

@@ -28,11 +28,10 @@ public class IndexModel : PageModel
 
     public RouteDiagnosticReport? Report { get; private set; }
 
-    public async Task OnGetAsync()
+    public void OnGet()
     {
         TargetHost = _options.DefaultTarget;
         PingCount = _options.DefaultPingCount;
-        Report = await _diagnosticService.AnalyzeAsync(TargetHost, PingCount, HttpContext.RequestAborted);
     }
 
     public async Task OnPostAsync()
@@ -45,7 +44,9 @@ public class IndexModel : PageModel
             return;
         }
 
-        Report = await _diagnosticService.AnalyzeAsync(TargetHost.Trim(), PingCount, HttpContext.RequestAborted);
+        var normalizedTarget = NormalizeTarget(TargetHost);
+        TargetHost = normalizedTarget;
+        Report = await _diagnosticService.AnalyzeAsync(normalizedTarget, PingCount, HttpContext.RequestAborted);
     }
 
     public string GetHopClass(RouteHop hop)
@@ -79,5 +80,17 @@ public class IndexModel : PageModel
         var ratio = (double)hop.AverageLatencyMs.Value / maxLatency;
         var width = Math.Clamp((int)Math.Round(ratio * 100), 8, 100);
         return $"{width}%";
+    }
+
+    private static string NormalizeTarget(string rawValue)
+    {
+        var candidate = rawValue.Trim();
+
+        if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
+        {
+            return uri.Host;
+        }
+
+        return candidate;
     }
 }

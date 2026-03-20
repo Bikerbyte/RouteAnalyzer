@@ -10,9 +10,19 @@ public sealed class RouteHop
 
     public int? AverageLatencyMs { get; init; }
 
+    public int? LatencyDeltaMs { get; init; }
+
     public bool IsTimeout { get; init; }
 
     public bool SuspectedSpike { get; init; }
+
+    public required string ScopeLabel { get; init; }
+
+    public required string ScopeDetail { get; init; }
+
+    public string? ReverseDns { get; init; }
+
+    public IpGeoDetails? GeoDetails { get; init; }
 
     public required string Note { get; init; }
 }
