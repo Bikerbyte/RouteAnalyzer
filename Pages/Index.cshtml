@@ -89,11 +89,16 @@
 
 <section class="panel route-panel">
     <div class="summary-head">
-        <h2>Hop timeline</h2>
+        <h2>Route views</h2>
         @if (Model.Report is not null)
         {
             <span>@Model.Report.Hops.Count 跳</span>
         }
+    </div>
+
+    <div class="view-tabs" role="tablist" aria-label="Route views">
+        <button type="button" class="view-tab is-active" data-view-target="timeline-view">Hop timeline</button>
+        <button type="button" class="view-tab" data-view-target="map-view">Route map</button>
     </div>
 
     @if (Model.Report is null || Model.Report.Hops.Count == 0)
@@ -104,49 +109,81 @@
     }
     else
     {
-        <div class="hop-list">
-            @foreach (var hop in Model.Report.Hops)
-            {
-                <article class="@Model.GetHopClass(hop)">
-                    <div class="hop-main">
-                        <div class="hop-id">
-                            <span class="hop-index">@hop.HopNumber</span>
-                            <div>
-                                <div class="hop-headline">
-                                    <h3>@hop.DisplayAddress</h3>
-                                    <span class="hop-badge">@hop.ScopeLabel</span>
+        <div class="route-view is-active" id="timeline-view">
+            <div class="hop-list">
+                @foreach (var hop in Model.Report.Hops)
+                {
+                    <article class="@Model.GetHopClass(hop)">
+                        <div class="hop-main">
+                            <div class="hop-id">
+                                <span class="hop-index">@hop.HopNumber</span>
+                                <div>
+                                    <div class="hop-headline">
+                                        <h3>@hop.DisplayAddress</h3>
+                                        <span class="hop-badge">@hop.ScopeLabel</span>
+                                    </div>
+                                    <p>@hop.ScopeDetail</p>
+                                    @if (!string.IsNullOrWhiteSpace(hop.ReverseDns))
+                                    {
+                                        <p class="hop-subline">PTR: @hop.ReverseDns</p>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Summary))
+                                    {
+                                        <p class="hop-subline">Location: @hop.GeoDetails!.Summary</p>
+                                    }
+                                    else if (!hop.IsTimeout && hop.ScopeLabel is "Public hop" or "Transit hop" or "Access / ISP edge")
+                                    {
+                                        <p class="hop-subline">Location: lookup unavailable</p>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Isp) || !string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn))
+                                    {
+                                        <p class="hop-subline">Network: @hop.GeoDetails?.Isp @(string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn) ? "" : $"(AS{hop.GeoDetails?.Asn})")</p>
+                                    }
+                                    <p class="hop-subline">@hop.Note</p>
                                 </div>
-                                <p>@hop.ScopeDetail</p>
-                                @if (!string.IsNullOrWhiteSpace(hop.ReverseDns))
+                            </div>
+                            <div class="hop-metrics">
+                                <strong>@(hop.AverageLatencyMs?.ToString() ?? "*") ms</strong>
+                                <span>Δ @(hop.LatencyDeltaMs?.ToString() ?? "-") ms</span>
+                                @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Timezone))
                                 {
-                                    <p class="hop-subline">PTR: @hop.ReverseDns</p>
+                                    <span>@hop.GeoDetails!.Timezone</span>
                                 }
-                                @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Summary))
-                                {
-                                    <p class="hop-subline">Location: @hop.GeoDetails!.Summary</p>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Isp) || !string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn))
-                                {
-                                    <p class="hop-subline">Network: @hop.GeoDetails?.Isp @(string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn) ? "" : $"(AS{hop.GeoDetails?.Asn})")</p>
-                                }
-                                <p class="hop-subline">@hop.Note</p>
+                                <span>@string.Join(" / ", hop.Samples)</span>
                             </div>
                         </div>
-                        <div class="hop-metrics">
-                            <strong>@(hop.AverageLatencyMs?.ToString() ?? "*") ms</strong>
-                            <span>Δ @(hop.LatencyDeltaMs?.ToString() ?? "-") ms</span>
-                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Timezone))
-                            {
-                                <span>@hop.GeoDetails!.Timezone</span>
-                            }
-                            <span>@string.Join(" / ", hop.Samples)</span>
+                        <div class="latency-bar">
+                            <div class="latency-fill" style="width:@Model.GetBarWidth(hop)"></div>
                         </div>
-                    </div>
-                    <div class="latency-bar">
-                        <div class="latency-fill" style="width:@Model.GetBarWidth(hop)"></div>
-                    </div>
-                </article>
-            }
+                    </article>
+                }
+            </div>
+        </div>
+
+        <div class="route-view" id="map-view">
+            <div class="route-map-track">
+                @foreach (var hop in Model.Report.Hops.Where(static hop => !hop.IsTimeout))
+                {
+                    <article class="map-node @(hop.SuspectedSpike ? "map-node-spike" : string.Empty)">
+                        <span class="map-hop">Hop @hop.HopNumber</span>
+                        <strong>@hop.DisplayAddress</strong>
+                        <span>@hop.ScopeLabel</span>
+                        @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Summary))
+                        {
+                            <span>@hop.GeoDetails!.Summary</span>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(hop.ReverseDns))
+                        {
+                            <span>@hop.ReverseDns</span>
+                        }
+                        else
+                        {
+                            <span>@hop.ScopeDetail</span>
+                        }
+                        <span>@(hop.AverageLatencyMs?.ToString() ?? "*") ms</span>
+                    </article>
+                }
+            </div>
         </div>
     }
 </section>
@@ -165,6 +202,16 @@
                 button.disabled = true;
                 button.classList.add("is-loading");
                 document.body.classList.add("is-submitting");
+            });
+
+            document.querySelectorAll("[data-view-target]").forEach((tab) => {
+                tab.addEventListener("click", () => {
+                    const target = tab.getAttribute("data-view-target");
+                    document.querySelectorAll(".view-tab").forEach((item) => item.classList.remove("is-active"));
+                    document.querySelectorAll(".route-view").forEach((panel) => panel.classList.remove("is-active"));
+                    tab.classList.add("is-active");
+                    document.getElementById(target)?.classList.add("is-active");
+                });
             });
         })();
     </script>
