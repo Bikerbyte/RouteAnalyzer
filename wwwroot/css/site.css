@@ -145,6 +145,22 @@ main[role="main"] {
   margin-top: 1rem;
 }
 
+.export-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.btn-secondary {
+  border: 1px solid rgba(20, 32, 51, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.62rem 0.9rem;
+  font-weight: 700;
+}
+
 .btn-check {
   display: inline-flex;
   align-items: center;
@@ -377,33 +393,47 @@ body.is-submitting .submit-status {
   background: linear-gradient(90deg, #60a5fa, #2563eb);
 }
 
-.route-map-track {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(210px, 1fr);
-  gap: 2.4rem;
-  overflow-x: auto;
-  padding: 0.5rem 0.2rem 1rem;
+.geo-map-canvas {
+  position: relative;
+  min-height: 560px;
+  border-radius: 24px;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(96, 165, 250, 0.12), transparent 18%),
+    radial-gradient(circle at 72% 30%, rgba(96, 165, 250, 0.1), transparent 20%),
+    radial-gradient(circle at 48% 68%, rgba(96, 165, 250, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(219, 234, 254, 0.6));
+  border: 1px solid rgba(37, 99, 235, 0.12);
+}
+
+.geo-map-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.08) 1px, transparent 1px);
+  background-size: 12.5% 16.6%;
 }
 
 .map-node {
   position: relative;
   display: grid;
   gap: 0.35rem;
-  min-height: 180px;
+  width: 200px;
   border-radius: 22px;
   padding: 1rem;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(219, 234, 254, 0.65));
   border: 1px solid rgba(37, 99, 235, 0.12);
   box-shadow: 0 16px 36px rgba(24, 39, 75, 0.08);
+  transform: translate(-50%, -50%);
 }
 
 .map-node::after {
   content: "";
   position: absolute;
-  top: 28px;
-  left: calc(100% + 0.6rem);
-  width: 1.2rem;
+  top: 50%;
+  left: calc(100% + 0.35rem);
+  width: 2rem;
   border-top: 2px dashed rgba(37, 99, 235, 0.35);
 }
 
@@ -431,6 +461,31 @@ body.is-submitting .submit-status {
 .map-node span {
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.raw-panel {
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #d6e2ff;
+  overflow: hidden;
+}
+
+.raw-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.raw-output {
+  margin: 0;
+  padding: 1rem;
+  max-height: 420px;
+  overflow: auto;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .validation-summary,
@@ -473,5 +528,13 @@ body.is-submitting .submit-status {
     flex: 1 1 auto;
     max-width: none;
     text-align: left;
+  }
+
+  .geo-map-canvas {
+    min-height: 720px;
+  }
+
+  .map-node {
+    width: 170px;
   }
 }

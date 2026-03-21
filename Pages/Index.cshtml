@@ -44,6 +44,22 @@
                 正在執行 ping 與 tracert，請稍候。
             </div>
         </form>
+
+        @if (Model.Report is not null)
+        {
+            <div class="export-group">
+                <form method="post" asp-page-handler="ExportJson">
+                    <input type="hidden" asp-for="TargetHost" />
+                    <input type="hidden" asp-for="PingCount" />
+                    <button type="submit" class="btn-secondary">Export JSON</button>
+                </form>
+                <form method="post" asp-page-handler="ExportCsv">
+                    <input type="hidden" asp-for="TargetHost" />
+                    <input type="hidden" asp-for="PingCount" />
+                    <button type="submit" class="btn-secondary">Export CSV</button>
+                </form>
+            </div>
+        }
     </div>
 
     <div class="panel summary-panel">
@@ -99,6 +115,7 @@
     <div class="view-tabs" role="tablist" aria-label="Route views">
         <button type="button" class="view-tab is-active" data-view-target="timeline-view">Hop timeline</button>
         <button type="button" class="view-tab" data-view-target="map-view">Route map</button>
+        <button type="button" class="view-tab" data-view-target="raw-view">Raw output</button>
     </div>
 
     @if (Model.Report is null || Model.Report.Hops.Count == 0)
@@ -161,10 +178,12 @@
         </div>
 
         <div class="route-view" id="map-view">
-            <div class="route-map-track">
+            <div class="geo-map-canvas">
+                <div class="geo-map-grid"></div>
                 @foreach (var hop in Model.Report.Hops.Where(static hop => !hop.IsTimeout))
                 {
-                    <article class="map-node @(hop.SuspectedSpike ? "map-node-spike" : string.Empty)">
+                    <article class="map-node @(hop.SuspectedSpike ? "map-node-spike" : string.Empty)"
+                             style="left:@Model.GetGeoX(hop); top:@Model.GetGeoY(hop);">
                         <span class="map-hop">Hop @hop.HopNumber</span>
                         <strong>@hop.DisplayAddress</strong>
                         <span>@hop.ScopeLabel</span>
@@ -183,6 +202,17 @@
                         <span>@(hop.AverageLatencyMs?.ToString() ?? "*") ms</span>
                     </article>
                 }
+            </div>
+        </div>
+
+        <div class="route-view" id="raw-view">
+            <div class="raw-panel">
+                <div class="raw-summary">
+                    <span>Ping: @(Model.Report.PingSummary.AverageRoundTripMs?.ToString() ?? "-") ms avg</span>
+                    <span>Loss: @Model.Report.PingSummary.PacketLossPercent%</span>
+                    <span>Hops: @Model.Report.Hops.Count</span>
+                </div>
+                <pre class="raw-output">@string.Join(Environment.NewLine, Model.Report.RawTracerouteLines)</pre>
             </div>
         </div>
     }

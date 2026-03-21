@@ -16,6 +16,12 @@ public sealed class IpGeoDetails
 
     public string? Isp { get; init; }
 
+    public double? Latitude { get; init; }
+
+    public double? Longitude { get; init; }
+
+    public bool HasCoordinates => Latitude.HasValue && Longitude.HasValue;
+
     public string? Summary
     {
         get

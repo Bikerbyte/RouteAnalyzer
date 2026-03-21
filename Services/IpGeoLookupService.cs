@@ -10,7 +10,7 @@ public sealed class IpGeoLookupService(HttpClient httpClient)
     {
         try
         {
-            using var response = await httpClient.GetAsync($"{ipAddress}?fields=country,region,city,timezone,connection", cancellationToken);
+            using var response = await httpClient.GetAsync($"{ipAddress}?fields=country,region,city,latitude,longitude,timezone,connection", cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var payload = await response.Content.ReadFromJsonAsync<IpWhoPayload>(cancellationToken: cancellationToken);
@@ -24,6 +24,8 @@ public sealed class IpGeoLookupService(HttpClient httpClient)
                 Country = payload.Country,
                 Region = payload.Region,
                 City = payload.City,
+                Latitude = payload.Latitude,
+                Longitude = payload.Longitude,
                 Timezone = payload.Timezone?.Id,
                 Asn = payload.Connection?.Asn?.ToString(),
                 Organization = payload.Connection?.Org,
@@ -49,6 +51,12 @@ public sealed class IpGeoLookupService(HttpClient httpClient)
 
         [JsonPropertyName("city")]
         public string? City { get; init; }
+
+        [JsonPropertyName("latitude")]
+        public double? Latitude { get; init; }
+
+        [JsonPropertyName("longitude")]
+        public double? Longitude { get; init; }
 
         [JsonPropertyName("timezone")]
         public TimezonePayload? Timezone { get; init; }
