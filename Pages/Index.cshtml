@@ -103,6 +103,46 @@
     </div>
 </section>
 
+@if (Model.Report is not null)
+{
+    <section class="panel diagnostics-panel">
+        <div class="summary-head">
+            <h2>Diagnostics</h2>
+            <span>Post-analysis checks</span>
+        </div>
+
+        <div class="diagnostics-grid">
+            <article class="diagnostic-card">
+                <span class="metric-label">Geo resolved</span>
+                <strong>@Model.GeoResolvedCount</strong>
+                <p>成功補到地區資訊的 hop 數量。</p>
+            </article>
+            <article class="diagnostic-card">
+                <span class="metric-label">Geo lookup miss</span>
+                <strong>@Model.GeoLookupMissCount</strong>
+                <p>符合 public hop 條件但沒有查到地理資訊的 hop。</p>
+            </article>
+            <article class="diagnostic-card">
+                <span class="metric-label">Timeout hops</span>
+                <strong>@Model.TimeoutCount</strong>
+                <p>沒有回覆 ICMP 的 hop 數量。</p>
+            </article>
+            <article class="diagnostic-card">
+                <span class="metric-label">Spike hops</span>
+                <strong>@Model.SpikeCount</strong>
+                <p>相較前一跳有明顯延遲升高的 hop。</p>
+            </article>
+        </div>
+
+        @if (Model.GeoResolvedCount == 0 && Model.GeoLookupMissCount > 0)
+        {
+            <p class="diagnostic-note">
+                目前 public hop 沒有拿到地理資訊，可能是外部 lookup 服務暫時無回應，或該 IP 沒有公開資料。
+            </p>
+        }
+    </section>
+}
+
 <section class="panel route-panel">
     <div class="summary-head">
         <h2>Route views</h2>
@@ -156,6 +196,27 @@
                                     {
                                         <p class="hop-subline">Network: @hop.GeoDetails?.Isp @(string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn) ? "" : $"(AS{hop.GeoDetails?.Asn})")</p>
                                     }
+                                    @if (hop.GeoDetails is not null)
+                                    {
+                                        <div class="hop-tags">
+                                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails.Isp))
+                                            {
+                                                <span class="hop-tag">ISP: @hop.GeoDetails.Isp</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails.Asn))
+                                            {
+                                                <span class="hop-tag">ASN: AS@hop.GeoDetails.Asn</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails.Organization) && !string.Equals(hop.GeoDetails.Organization, hop.GeoDetails.Isp, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="hop-tag">Org: @hop.GeoDetails.Organization</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails.Timezone))
+                                            {
+                                                <span class="hop-tag">TZ: @hop.GeoDetails.Timezone</span>
+                                            }
+                                        </div>
+                                    }
                                     <p class="hop-subline">@hop.Note</p>
                                 </div>
                             </div>
@@ -178,12 +239,49 @@
         </div>
 
         <div class="route-view" id="map-view">
+            @{
+                var mapHops = Model.Report.Hops.Where(static hop => !hop.IsTimeout).ToList();
+            }
+            <div class="map-metrics">
+                <article class="map-metric">
+                    <span class="metric-label">Public hops</span>
+                    <strong>@Model.PublicHopCount</strong>
+                </article>
+                <article class="map-metric">
+                    <span class="metric-label">Geocoded hops</span>
+                    <strong>@Model.CoordinateHopCount</strong>
+                </article>
+                <article class="map-metric">
+                    <span class="metric-label">Lookup unavailable</span>
+                    <strong>@Model.GeoLookupMissCount</strong>
+                </article>
+            </div>
+
+            <div class="map-legend" aria-label="Map legend">
+                <span class="legend-item"><i class="legend-dot legend-dot-private"></i>Local / private</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-public"></i>Public route</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-spike"></i>Latency spike</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-missing"></i>No geo match</span>
+            </div>
+
             <div class="geo-map-canvas">
                 <div class="geo-map-grid"></div>
-                @foreach (var hop in Model.Report.Hops.Where(static hop => !hop.IsTimeout))
+                <svg class="map-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                    @for (var index = 1; index < mapHops.Count; index++)
+                    {
+                        var previousHop = mapHops[index - 1];
+                        var currentHop = mapHops[index];
+                        <line class="@Model.GetMapLineClass(previousHop, currentHop)"
+                              x1="@Model.GetGeoXValue(previousHop).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)"
+                              y1="@Model.GetGeoYValue(previousHop).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)"
+                              x2="@Model.GetGeoXValue(currentHop).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)"
+                              y2="@Model.GetGeoYValue(currentHop).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)" />
+                    }
+                </svg>
+
+                @foreach (var hop in mapHops)
                 {
-                    <article class="map-node @(hop.SuspectedSpike ? "map-node-spike" : string.Empty)"
-                             style="left:@Model.GetGeoX(hop); top:@Model.GetGeoY(hop);">
+                    <article class="@Model.GetMapNodeClass(hop)" style="left:@Model.GetGeoX(hop); top:@Model.GetGeoY(hop);">
                         <span class="map-hop">Hop @hop.HopNumber</span>
                         <strong>@hop.DisplayAddress</strong>
                         <span>@hop.ScopeLabel</span>
@@ -199,6 +297,20 @@
                         {
                             <span>@hop.ScopeDetail</span>
                         }
+                        <div class="map-node-meta">
+                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Isp))
+                            {
+                                <span>@hop.GeoDetails!.Isp</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn))
+                            {
+                                <span>AS@hop.GeoDetails!.Asn</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Timezone))
+                            {
+                                <span>@hop.GeoDetails!.Timezone</span>
+                            }
+                        </div>
                         <span>@(hop.AverageLatencyMs?.ToString() ?? "*") ms</span>
                     </article>
                 }

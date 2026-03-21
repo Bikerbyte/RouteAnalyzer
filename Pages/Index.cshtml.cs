@@ -30,6 +30,23 @@ public class IndexModel : PageModel
 
     public RouteDiagnosticReport? Report { get; private set; }
 
+    public int TimeoutCount => Report?.Hops.Count(static hop => hop.IsTimeout) ?? 0;
+
+    public int SpikeCount => Report?.Hops.Count(static hop => hop.SuspectedSpike) ?? 0;
+
+    public int GeoResolvedCount => Report?.Hops.Count(static hop => !string.IsNullOrWhiteSpace(hop.GeoDetails?.Summary)) ?? 0;
+
+    public int GeoLookupMissCount => Report?.Hops.Count(static hop =>
+        !hop.IsTimeout
+        && hop.ScopeLabel is "Public hop" or "Transit hop" or "Access / ISP edge"
+        && string.IsNullOrWhiteSpace(hop.GeoDetails?.Summary)) ?? 0;
+
+    public int PublicHopCount => Report?.Hops.Count(static hop =>
+        !hop.IsTimeout
+        && hop.ScopeLabel is "Public hop" or "Transit hop" or "Access / ISP edge" or "Destination") ?? 0;
+
+    public int CoordinateHopCount => Report?.Hops.Count(static hop => hop.GeoDetails?.HasCoordinates == true) ?? 0;
+
     public void OnGet()
     {
         TargetHost = _options.DefaultTarget;
@@ -132,29 +149,81 @@ public class IndexModel : PageModel
         return $"{width}%";
     }
 
-    public string GetGeoX(RouteHop hop)
+    public double GetGeoXValue(RouteHop hop)
     {
         var longitude = hop.GeoDetails?.Longitude;
         if (!longitude.HasValue)
         {
-            return "8%";
+            return 8d;
         }
 
         var x = ((longitude.Value + 180d) / 360d) * 100d;
-        return $"{Math.Clamp(x, 5d, 95d):0.##}%";
+        return Math.Clamp(x, 5d, 95d);
     }
 
-    public string GetGeoY(RouteHop hop)
+    public string GetGeoX(RouteHop hop)
+    {
+        return $"{GetGeoXValue(hop):0.##}%";
+    }
+
+    public double GetGeoYValue(RouteHop hop)
     {
         var latitude = hop.GeoDetails?.Latitude;
         if (!latitude.HasValue)
         {
-            return $"{12 + Math.Min(hop.HopNumber * 10, 70)}%";
+            return 12 + Math.Min(hop.HopNumber * 10, 70);
         }
 
         var normalized = (90d - latitude.Value) / 180d;
         var y = normalized * 100d;
-        return $"{Math.Clamp(y, 10d, 82d):0.##}%";
+        return Math.Clamp(y, 10d, 82d);
+    }
+
+    public string GetGeoY(RouteHop hop)
+    {
+        return $"{GetGeoYValue(hop):0.##}%";
+    }
+
+    public string GetMapNodeClass(RouteHop hop)
+    {
+        var classes = new List<string> { "map-node" };
+
+        if (hop.SuspectedSpike)
+        {
+            classes.Add("map-node-spike");
+        }
+
+        if (hop.ScopeLabel is "LAN / Gateway" or "Private network")
+        {
+            classes.Add("map-node-private");
+        }
+        else if (hop.ScopeLabel == "Destination")
+        {
+            classes.Add("map-node-destination");
+        }
+
+        if (string.IsNullOrWhiteSpace(hop.GeoDetails?.Summary))
+        {
+            classes.Add("map-node-ungrounded");
+        }
+
+        return string.Join(" ", classes);
+    }
+
+    public string GetMapLineClass(RouteHop fromHop, RouteHop toHop)
+    {
+        if (toHop.SuspectedSpike)
+        {
+            return "map-line map-line-spike";
+        }
+
+        if (fromHop.ScopeLabel is "LAN / Gateway" or "Private network"
+            && toHop.ScopeLabel is "LAN / Gateway" or "Private network")
+        {
+            return "map-line map-line-private";
+        }
+
+        return "map-line";
     }
 
     private async Task<RouteDiagnosticReport?> BuildReportOrNullAsync()
