@@ -264,6 +264,11 @@
                 <span class="legend-item"><i class="legend-dot legend-dot-missing"></i>No geo match</span>
             </div>
 
+            @if (Model.CoordinateHopCount == 0)
+            {
+                <p class="map-note">目前沒有 public hop 的地理座標，因此此視圖會依 hop 順序展開，而不是實際地圖位置。</p>
+            }
+
             <div class="geo-map-canvas">
                 <div class="geo-map-grid"></div>
                 <svg class="map-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">

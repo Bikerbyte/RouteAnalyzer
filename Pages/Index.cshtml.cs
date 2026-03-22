@@ -154,7 +154,7 @@ public class IndexModel : PageModel
         var longitude = hop.GeoDetails?.Longitude;
         if (!longitude.HasValue)
         {
-            return 14d;
+            return GetFallbackX(hop);
         }
 
         var x = ((longitude.Value + 180d) / 360d) * 100d;
@@ -171,7 +171,7 @@ public class IndexModel : PageModel
         var latitude = hop.GeoDetails?.Latitude;
         if (!latitude.HasValue)
         {
-            return 16 + Math.Min(hop.HopNumber * 8, 56);
+            return GetFallbackY(hop);
         }
 
         var normalized = (90d - latitude.Value) / 180d;
@@ -224,6 +224,49 @@ public class IndexModel : PageModel
         }
 
         return "map-line";
+    }
+
+    private double GetFallbackX(RouteHop hop)
+    {
+        var visibleHops = Report?.Hops.Where(static item => !item.IsTimeout).ToList() ?? [];
+        if (visibleHops.Count <= 1)
+        {
+            return 18d;
+        }
+
+        var hopIndex = visibleHops.FindIndex(item => item.HopNumber == hop.HopNumber);
+        if (hopIndex < 0)
+        {
+            return 18d;
+        }
+
+        var ratio = (double)hopIndex / Math.Max(visibleHops.Count - 1, 1);
+        return 14d + (ratio * 72d);
+    }
+
+    private double GetFallbackY(RouteHop hop)
+    {
+        var visibleHops = Report?.Hops.Where(static item => !item.IsTimeout).ToList() ?? [];
+        var hopIndex = visibleHops.FindIndex(item => item.HopNumber == hop.HopNumber);
+        var stagger = hopIndex < 0 ? 0d : ((hopIndex % 3) - 1) * 6d;
+
+        var baseline = hop.ScopeLabel switch
+        {
+            "LAN / Gateway" => 24d,
+            "Private network" => 36d,
+            "Access / ISP edge" => 48d,
+            "Public hop" => 58d,
+            "Transit hop" => 68d,
+            "Destination" => 52d,
+            _ => 60d
+        };
+
+        if (hop.SuspectedSpike)
+        {
+            baseline -= 10d;
+        }
+
+        return Math.Clamp(baseline + stagger, 18d, 82d);
     }
 
     private async Task<RouteDiagnosticReport?> BuildReportOrNullAsync()

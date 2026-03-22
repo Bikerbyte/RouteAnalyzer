@@ -473,6 +473,12 @@ body.is-submitting .submit-status {
   color: var(--muted);
 }
 
+.map-note {
+  margin: -0.15rem 0 1rem;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
 .legend-item {
   display: inline-flex;
   align-items: center;
@@ -556,7 +562,7 @@ body.is-submitting .submit-status {
   position: absolute;
   display: grid;
   gap: 0.35rem;
-  width: 200px;
+  width: 168px;
   border-radius: 22px;
   padding: 1rem;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(219, 234, 254, 0.65));
