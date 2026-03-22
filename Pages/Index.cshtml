@@ -7,22 +7,30 @@
 <section class="hero-panel">
     <div class="hero-copy">
         <p class="eyebrow">Route Analyzer</p>
-        <h1>Network route diagnostics for unstable latency.</h1>
+        <h1>網路路徑診斷</h1>
         <p class="hero-text">
-            輸入目標主機後，系統會執行 <code>ping</code> 與 <code>tracert</code>，
-            協助你快速判斷延遲是否從某一跳開始明顯升高，並補上該 hop 所在網段類型、PTR 與地理資訊。
+            用一次 <code>ping</code> 與 <code>tracert</code> 快速整理封包遺失、延遲變化與可疑 hop，
+            幫助你判斷問題比較接近本地網路、ISP 邊界，還是中途節點。
         </p>
     </div>
     <div class="hero-note">
-        <span>Current scope</span>
-        <strong>Windows host diagnostics, focused on single-run route analysis</strong>
+        <span class="scope-title">檢測範圍</span>
+        <div class="scope-tags">
+            <span class="scope-tag">Windows / tracert</span>
+            <span class="scope-tag">單次路徑診斷</span>
+            <span class="scope-tag">PTR / Geo 補充</span>
+            <span class="scope-tag">JSON / CSV 匯出</span>
+        </div>
     </div>
 </section>
 
 <section class="layout-grid">
     <div class="panel control-panel">
-        <h2>Run analysis</h2>
-        <p>支援輸入完整網址、網域或 IP。若輸入網址，系統會自動取 host 後再做 ping / tracert。</p>
+        <div class="panel-heading">
+            <h2>分析設定</h2>
+            <span>支援網址、網域與 IP</span>
+        </div>
+        <p>若輸入完整網址，系統會自動擷取 host 後再執行診斷。</p>
 
         <form method="post" id="analyze-form">
             <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
@@ -51,12 +59,12 @@
                 <form method="post" asp-page-handler="ExportJson">
                     <input type="hidden" asp-for="TargetHost" />
                     <input type="hidden" asp-for="PingCount" />
-                    <button type="submit" class="btn-secondary">Export JSON</button>
+                    <button type="submit" class="btn-secondary">匯出 JSON</button>
                 </form>
                 <form method="post" asp-page-handler="ExportCsv">
                     <input type="hidden" asp-for="TargetHost" />
                     <input type="hidden" asp-for="PingCount" />
-                    <button type="submit" class="btn-secondary">Export CSV</button>
+                    <button type="submit" class="btn-secondary">匯出 CSV</button>
                 </form>
             </div>
         }
@@ -64,10 +72,10 @@
 
     <div class="panel summary-panel">
         <div class="summary-head">
-            <h2>Summary</h2>
+            <h2>診斷摘要</h2>
             @if (Model.Report is not null)
             {
-                <span>@Model.Report.TargetHost</span>
+                <span>目標: @Model.Report.TargetHost</span>
             }
         </div>
 
@@ -81,19 +89,19 @@
         {
             <div class="summary-grid">
                 <article class="metric-card">
-                    <span class="metric-label">Average ping</span>
+                    <span class="metric-label">平均延遲</span>
                     <strong>@(Model.Report.PingSummary.AverageRoundTripMs?.ToString() ?? "-") ms</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">Packet loss</span>
+                    <span class="metric-label">封包遺失</span>
                     <strong>@Model.Report.PingSummary.PacketLossPercent%</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">Max hop latency</span>
+                    <span class="metric-label">最高 hop 延遲</span>
                     <strong>@(Model.Report.Hops.Where(static hop => hop.AverageLatencyMs.HasValue).Select(static hop => hop.AverageLatencyMs!.Value).DefaultIfEmpty().Max()) ms</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">Likely bottleneck</span>
+                    <span class="metric-label">可疑瓶頸</span>
                     <strong>@(Model.Report.SuspectedIssue ?? "未觀察到明顯瓶頸")</strong>
                 </article>
             </div>
@@ -107,28 +115,28 @@
 {
     <section class="panel diagnostics-panel">
         <div class="summary-head">
-            <h2>Diagnostics</h2>
-            <span>Post-analysis checks</span>
+            <h2>檢查指標</h2>
+            <span>分析後檢視</span>
         </div>
 
         <div class="diagnostics-grid">
             <article class="diagnostic-card">
-                <span class="metric-label">Geo resolved</span>
+                <span class="metric-label">Geo 成功</span>
                 <strong>@Model.GeoResolvedCount</strong>
                 <p>成功補到地區資訊的 hop 數量。</p>
             </article>
             <article class="diagnostic-card">
-                <span class="metric-label">Geo lookup miss</span>
+                <span class="metric-label">Geo 落空</span>
                 <strong>@Model.GeoLookupMissCount</strong>
                 <p>符合 public hop 條件但沒有查到地理資訊的 hop。</p>
             </article>
             <article class="diagnostic-card">
-                <span class="metric-label">Timeout hops</span>
+                <span class="metric-label">Timeout hop</span>
                 <strong>@Model.TimeoutCount</strong>
                 <p>沒有回覆 ICMP 的 hop 數量。</p>
             </article>
             <article class="diagnostic-card">
-                <span class="metric-label">Spike hops</span>
+                <span class="metric-label">Latency spike</span>
                 <strong>@Model.SpikeCount</strong>
                 <p>相較前一跳有明顯延遲升高的 hop。</p>
             </article>
@@ -145,7 +153,7 @@
 
 <section class="panel route-panel">
     <div class="summary-head">
-        <h2>Route views</h2>
+        <h2>路徑檢視</h2>
         @if (Model.Report is not null)
         {
             <span>@Model.Report.Hops.Count 跳</span>
@@ -153,9 +161,9 @@
     </div>
 
     <div class="view-tabs" role="tablist" aria-label="Route views">
-        <button type="button" class="view-tab is-active" data-view-target="timeline-view">Hop timeline</button>
-        <button type="button" class="view-tab" data-view-target="map-view">Route map</button>
-        <button type="button" class="view-tab" data-view-target="raw-view">Raw output</button>
+        <button type="button" class="view-tab is-active" data-view-target="timeline-view">Hop 時間軸</button>
+        <button type="button" class="view-tab" data-view-target="map-view">路徑地圖</button>
+        <button type="button" class="view-tab" data-view-target="raw-view">原始輸出</button>
     </div>
 
     @if (Model.Report is null || Model.Report.Hops.Count == 0)
@@ -179,7 +187,10 @@
                                         <h3>@hop.DisplayAddress</h3>
                                         <span class="hop-badge">@hop.ScopeLabel</span>
                                     </div>
-                                    <p>@hop.ScopeDetail</p>
+                                    @if (string.IsNullOrWhiteSpace(hop.ReverseDns) || !hop.ScopeDetail.Contains(hop.ReverseDns, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <p>@hop.ScopeDetail</p>
+                                    }
                                     @if (!string.IsNullOrWhiteSpace(hop.ReverseDns))
                                     {
                                         <p class="hop-subline">PTR: @hop.ReverseDns</p>
@@ -244,24 +255,24 @@
             }
             <div class="map-metrics">
                 <article class="map-metric">
-                    <span class="metric-label">Public hops</span>
+                    <span class="metric-label">Public hop</span>
                     <strong>@Model.PublicHopCount</strong>
                 </article>
                 <article class="map-metric">
-                    <span class="metric-label">Geocoded hops</span>
+                    <span class="metric-label">Geocoded hop</span>
                     <strong>@Model.CoordinateHopCount</strong>
                 </article>
                 <article class="map-metric">
-                    <span class="metric-label">Lookup unavailable</span>
+                    <span class="metric-label">Geo 缺漏</span>
                     <strong>@Model.GeoLookupMissCount</strong>
                 </article>
             </div>
 
             <div class="map-legend" aria-label="Map legend">
-                <span class="legend-item"><i class="legend-dot legend-dot-private"></i>Local / private</span>
-                <span class="legend-item"><i class="legend-dot legend-dot-public"></i>Public route</span>
-                <span class="legend-item"><i class="legend-dot legend-dot-spike"></i>Latency spike</span>
-                <span class="legend-item"><i class="legend-dot legend-dot-missing"></i>No geo match</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-private"></i>本地 / 私有網段</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-public"></i>公網路徑</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-spike"></i>延遲升高</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-missing"></i>缺少 Geo</span>
             </div>
 
             @if (Model.CoordinateHopCount == 0)
