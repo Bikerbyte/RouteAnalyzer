@@ -154,11 +154,11 @@ public class IndexModel : PageModel
         var longitude = hop.GeoDetails?.Longitude;
         if (!longitude.HasValue)
         {
-            return 8d;
+            return 14d;
         }
 
         var x = ((longitude.Value + 180d) / 360d) * 100d;
-        return Math.Clamp(x, 5d, 95d);
+        return Math.Clamp(x, 14d, 86d);
     }
 
     public string GetGeoX(RouteHop hop)
@@ -171,12 +171,12 @@ public class IndexModel : PageModel
         var latitude = hop.GeoDetails?.Latitude;
         if (!latitude.HasValue)
         {
-            return 12 + Math.Min(hop.HopNumber * 10, 70);
+            return 16 + Math.Min(hop.HopNumber * 8, 56);
         }
 
         var normalized = (90d - latitude.Value) / 180d;
         var y = normalized * 100d;
-        return Math.Clamp(y, 10d, 82d);
+        return Math.Clamp(y, 14d, 80d);
     }
 
     public string GetGeoY(RouteHop hop)
