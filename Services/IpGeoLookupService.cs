@@ -1,10 +1,10 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using RouteAnalyzer.Models;
 
 namespace RouteAnalyzer.Services;
 
-public sealed class IpGeoLookupService(HttpClient httpClient)
+public sealed class IpGeoLookupService(HttpClient httpClient, ILogger<IpGeoLookupService> logger)
 {
     public async Task<IpGeoDetails?> LookupAsync(string ipAddress, CancellationToken cancellationToken)
     {
@@ -32,8 +32,14 @@ public sealed class IpGeoLookupService(HttpClient httpClient)
                 Isp = payload.Connection?.Isp
             };
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogDebug("Geo lookup timed out for {IpAddress}", ipAddress);
+            return null;
+        }
         catch
         {
+            logger.LogDebug("Geo lookup failed for {IpAddress}", ipAddress);
             return null;
         }
     }

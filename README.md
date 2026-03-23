@@ -1,44 +1,49 @@
-# Route Analyzer
+﻿# Route Analyzer
 
-`Route Analyzer` 是一個用來排查網路延遲升高或連線不穩的小工具站。
+Route Analyzer is a .NET 10 Razor Pages tool that turns a single `ping` + `tracert` run into an operator-friendly network path report.
+It is designed as a portfolio project for infra, SRE, DevOps, and cloud-facing roles, so the app emphasizes incident-style summaries,
+exportable evidence, runtime metadata, and a small but intentional operational surface.
 
-很多時候只知道「今天網路怪怪的」，但不知道問題是在自己電腦、家中網路、ISP，還是中途某一段路徑。這個專案把 `ping` 和 `tracert` 的結果整理成比較容易判讀的畫面，讓使用者快速看到哪一跳開始延遲升高。
+## What This Project Demonstrates
 
-## 功能
+- Network troubleshooting workflow instead of CRUD-only UI work.
+- Server-side enrichment of traceroute hops with PTR, geo, ASN, and ISP context.
+- Operator-oriented reporting with status levels such as `Stable`, `Observe`, `Investigate`, and `Critical`.
+- Production-minded ASP.NET Core setup with config validation, response compression, forwarded headers, and `/healthz`.
+- Clear separation between page model orchestration, diagnostic services, and presentation.
 
-- 輸入網域或 IP 做路徑分析
-- 先做 `ping` 取得基本延遲與封包遺失
-- 再跑 `tracert` 顯示每一跳的延遲
-- 標示疑似 latency spike 的 hop
-- 對 public hop 補上 PTR、地區、ASN 與 ISP 資訊
-- 用 bar 視覺化每一跳延遲
+## Stack
 
-## 使用方式
+- .NET 10
+- ASP.NET Core Razor Pages
+- Native `System.Net.NetworkInformation.Ping`
+- Windows `tracert` parsing
+- `ipwho.is` for public IP enrichment
+
+## Run Locally
 
 ```bash
 dotnet run
 ```
 
-開啟首頁後輸入目標主機，例如：
+Then open the local app and try targets such as:
 
 - `1.1.1.1`
 - `8.8.8.8`
-- 常用網站或伺服器網域
+- `github.com`
+- `cloudflare.com`
 
-## 技術選擇
+## Operational Endpoint
 
-- .NET 10
-- ASP.NET Core Razor Pages
-- `System.Net.NetworkInformation.Ping`
-- Windows `tracert` 指令輸出解析
-- `ipwho.is` 的公開 HTTPS API 做 IP 地理資訊補充
+- `GET /healthz`: simple JSON health output for runtime checks.
 
-## 目前限制
+## Current Limitations
 
-- 目前只針對 Windows 測試
-- `tracert` 是系統指令，若不同語系或網路設備回應格式差很多，解析可能需要再調整
-- 這版先專注在單次診斷，不做長期監控
+- Detailed traceroute parsing currently targets Windows.
+- Geo enrichment depends on the availability of the upstream public API.
+- This project focuses on single-run diagnostics rather than continuous monitoring.
 
-## 為什麼做這個
+## Why It Fits Infra / SRE / Cloud Roles
 
-這個題目比單純的 CRUD 或一般工具站更有明確使用情境：當網路延遲突然升高時，使用者往往不知道是整條路都慢，還是某一跳之後才突然變糟。我想把這種排查過程做成一般人也看得懂的畫面，而不是只丟命令列結果。
+This project is intentionally positioned as a lightweight diagnostics workbench rather than a generic web app.
+It shows how I think about troubleshooting UX, safe host setup, execution metadata, and operational clarity in addition to UI polish.

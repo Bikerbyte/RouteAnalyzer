@@ -1,11 +1,14 @@
+﻿using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Net;
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Options;
 using RouteAnalyzer.Models;
 using RouteAnalyzer.Options;
 using RouteAnalyzer.Services;
-using System.Text;
-using System.Text.Json;
 
 namespace RouteAnalyzer.Pages;
 
@@ -23,10 +26,12 @@ public class IndexModel : PageModel
     }
 
     [BindProperty]
+    [StringLength(255)]
     public string TargetHost { get; set; } = string.Empty;
 
     [BindProperty]
-    public int PingCount { get; set; } = 4;
+    [Range(RouteAnalyzerOptions.MinPingCount, RouteAnalyzerOptions.MaxPingCount)]
+    public int PingCount { get; set; } = RouteAnalyzerOptions.MinPingCount + 1;
 
     public RouteDiagnosticReport? Report { get; private set; }
 
@@ -47,6 +52,36 @@ public class IndexModel : PageModel
 
     public int CoordinateHopCount => Report?.Hops.Count(static hop => hop.GeoDetails?.HasCoordinates == true) ?? 0;
 
+    public int GeoCoveragePercent => PublicHopCount == 0
+        ? 0
+        : (int)Math.Round((double)GeoResolvedCount / PublicHopCount * 100);
+
+    public string GeoCoverageDisplay => PublicHopCount == 0
+        ? "n/a"
+        : $"{GeoResolvedCount}/{PublicHopCount} ({GeoCoveragePercent}%)";
+
+    public string JitterDisplay => Report?.PingSummary.JitterMs is int jitter
+        ? $"{jitter} ms"
+        : "-";
+
+    public string PingRangeDisplay
+    {
+        get
+        {
+            if (Report?.PingSummary.MinimumRoundTripMs is int min
+                && Report.PingSummary.MaximumRoundTripMs is int max)
+            {
+                return $"{min}-{max} ms";
+            }
+
+            return "-";
+        }
+    }
+
+    public string GeneratedAtDisplay => Report is null
+        ? "-"
+        : Report.GeneratedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'zzz", CultureInfo.InvariantCulture);
+
     public void OnGet()
     {
         TargetHost = _options.DefaultTarget;
@@ -55,15 +90,19 @@ public class IndexModel : PageModel
 
     public async Task OnPostAsync()
     {
-        PingCount = Math.Clamp(PingCount, 3, 10);
+        PingCount = Math.Clamp(PingCount, RouteAnalyzerOptions.MinPingCount, RouteAnalyzerOptions.MaxPingCount);
 
-        if (string.IsNullOrWhiteSpace(TargetHost))
+        if (!TryNormalizeTarget(TargetHost, out var normalizedTarget))
         {
-            ModelState.AddModelError(string.Empty, "請輸入要測試的目標主機、網域或 IP。");
+            ModelState.AddModelError(string.Empty, "Enter a valid hostname, IP address, or URL.");
             return;
         }
 
-        var normalizedTarget = NormalizeTarget(TargetHost);
+        if (!ModelState.IsValid)
+        {
+            return;
+        }
+
         TargetHost = normalizedTarget;
         Report = await _diagnosticService.AnalyzeAsync(normalizedTarget, PingCount, HttpContext.RequestAborted);
     }
@@ -226,6 +265,18 @@ public class IndexModel : PageModel
         return "map-line";
     }
 
+    public string GetStatusClass()
+    {
+        return Report?.StatusLabel switch
+        {
+            "Critical" => "status-pill status-critical",
+            "Investigate" => "status-pill status-investigate",
+            "Observe" => "status-pill status-observe",
+            "Unsupported" => "status-pill status-unsupported",
+            _ => "status-pill status-stable"
+        };
+    }
+
     private double GetFallbackX(RouteHop hop)
     {
         var visibleHops = Report?.Hops.Where(static item => !item.IsTimeout).ToList() ?? [];
@@ -271,30 +322,64 @@ public class IndexModel : PageModel
 
     private async Task<RouteDiagnosticReport?> BuildReportOrNullAsync()
     {
-        PingCount = Math.Clamp(PingCount, 3, 10);
+        PingCount = Math.Clamp(PingCount, RouteAnalyzerOptions.MinPingCount, RouteAnalyzerOptions.MaxPingCount);
 
-        if (string.IsNullOrWhiteSpace(TargetHost))
+        if (!TryNormalizeTarget(TargetHost, out var normalizedTarget))
         {
-            ModelState.AddModelError(string.Empty, "請輸入要測試的目標主機、網域或 IP。");
+            ModelState.AddModelError(string.Empty, "Enter a valid hostname, IP address, or URL.");
             return null;
         }
 
-        var normalizedTarget = NormalizeTarget(TargetHost);
+        if (!ModelState.IsValid)
+        {
+            return null;
+        }
+
         TargetHost = normalizedTarget;
         Report = await _diagnosticService.AnalyzeAsync(normalizedTarget, PingCount, HttpContext.RequestAborted);
         return Report;
     }
 
-    private static string NormalizeTarget(string rawValue)
+    private static bool TryNormalizeTarget(string rawValue, out string normalizedTarget)
     {
+        normalizedTarget = string.Empty;
         var candidate = rawValue.Trim();
+
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
 
         if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
         {
-            return uri.Host;
+            candidate = uri.Host;
         }
 
-        return candidate;
+        candidate = candidate.Trim().TrimEnd('.');
+
+        if (candidate.Length == 0
+            || candidate.Length > 255
+            || candidate.Contains(' ')
+            || candidate.Contains('/')
+            || candidate.Contains('\\'))
+        {
+            return false;
+        }
+
+        if (IPAddress.TryParse(candidate, out _))
+        {
+            normalizedTarget = candidate;
+            return true;
+        }
+
+        var hostNameType = Uri.CheckHostName(candidate);
+        if (hostNameType is UriHostNameType.Dns or UriHostNameType.IPv4 or UriHostNameType.IPv6)
+        {
+            normalizedTarget = candidate;
+            return true;
+        }
+
+        return false;
     }
 
     private static string SanitizeFileName(string value)

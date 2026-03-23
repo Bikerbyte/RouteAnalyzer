@@ -1,17 +1,46 @@
-@page
+﻿@page
 @model PrivacyModel
 @{
-    ViewData["Title"] = "說明";
+    ViewData["Title"] = "Project Notes";
 }
 
-<section class="panel privacy-panel">
-    <h1>專案說明</h1>
-    <p>
-        這個專案聚焦在單次路徑診斷：輸入目標主機後，頁面會整理 ping 與 traceroute 的結果，
-        讓使用者快速判讀延遲變化、封包遺失，以及疑似的瓶頸 hop。
-    </p>
-    <p>
-        目前版本會在伺服器端執行 <code>ping</code> 和 <code>tracert</code>，因此比較適合在 Windows 本機自己跑。
-        對 public IP，頁面也會嘗試補上地區、ASN 與 ISP 資訊，方便判讀這一跳大致位在哪一段網路。
-    </p>
+<section class="panel note-panel">
+    <div class="summary-head">
+        <h1>Project Notes</h1>
+        <span>Architecture, scope, and roadmap</span>
+    </div>
+
+    <div class="notes-grid">
+        <article class="note-card">
+            <h2>Why This Exists</h2>
+            <p>
+                Route Analyzer turns a one-off <code>ping</code> plus <code>tracert</code> run into a readable path report.
+                The goal is to make first-pass network troubleshooting easier than scanning raw terminal output.
+            </p>
+        </article>
+
+        <article class="note-card">
+            <h2>Infra / SRE Angle</h2>
+            <p>
+                The app is intentionally shaped like an incident triage tool: structured summaries, exportable evidence,
+                runtime metadata, health checks, and configuration validation are part of the product, not afterthoughts.
+            </p>
+        </article>
+
+        <article class="note-card">
+            <h2>How It Works</h2>
+            <p>
+                The server runs native ICMP probes, parses Windows <code>tracert</code> output, enriches public hops with PTR and geo data,
+                then scores the path as <em>Stable</em>, <em>Observe</em>, <em>Investigate</em>, or <em>Critical</em>.
+            </p>
+        </article>
+
+        <article class="note-card">
+            <h2>Current Limits</h2>
+            <p>
+                Detailed parsing currently targets Windows. Geo enrichment depends on <code>ipwho.is</code>, and the tool is designed for single-run diagnostics,
+                not long-term telemetry collection.
+            </p>
+        </article>
+    </div>
 </section>

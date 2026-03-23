@@ -1,4 +1,4 @@
-namespace RouteAnalyzer.Models;
+﻿namespace RouteAnalyzer.Models;
 
 public sealed class PingSummary
 {
@@ -13,4 +13,10 @@ public sealed class PingSummary
     public int? MinimumRoundTripMs { get; init; }
 
     public int? MaximumRoundTripMs { get; init; }
+
+    public int? JitterMs { get; init; }
+
+    public int SuccessRatePercent => Sent <= 0
+        ? 0
+        : (int)Math.Round((double)Received / Sent * 100);
 }

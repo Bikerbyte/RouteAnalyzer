@@ -1,70 +1,111 @@
-@page
+﻿@page
 @model IndexModel
 @{
-    ViewData["Title"] = "網路路徑分析";
+    ViewData["Title"] = "Route Analyzer";
+    var hasReport = Model.Report is not null;
 }
 
 <section class="hero-panel">
     <div class="hero-copy">
-        <p class="eyebrow">Route Analyzer</p>
-        <h1>網路路徑診斷</h1>
+        <p class="eyebrow">Network Path Observability Workbench</p>
+        <h1>Route Analyzer</h1>
         <p class="hero-text">
-            用一次 <code>ping</code> 與 <code>tracert</code> 快速整理封包遺失、延遲變化與可疑 hop，
-            幫助你判斷問題比較接近本地網路、ISP 邊界，還是中途節點。
+            Turn a single <code>ping</code> + <code>tracert</code> run into an operator-friendly network path report.
+            This side project is intentionally positioned for infra, SRE, DevOps, and cloud-facing roles, so it highlights
+            troubleshooting signals, exportable evidence, and a small but real operational surface.
         </p>
-    </div>
-    <div class="hero-note">
-        <span class="scope-title">檢測範圍</span>
-        <div class="scope-tags">
-            <span class="scope-tag">Windows / tracert</span>
-            <span class="scope-tag">單次路徑診斷</span>
-            <span class="scope-tag">PTR / Geo 補充</span>
-            <span class="scope-tag">JSON / CSV 匯出</span>
+        <div class="hero-highlights">
+            <span class="scope-tag">Incident-style summary</span>
+            <span class="scope-tag">Geo and ASN enrichment</span>
+            <span class="scope-tag">CSV / JSON export</span>
+            <span class="scope-tag">/healthz endpoint</span>
         </div>
     </div>
+    <aside class="hero-note">
+        <span class="scope-title">What This Project Shows</span>
+        <div class="capability-mini-grid">
+            <article>
+                <strong>Diagnostics UX</strong>
+                <p>Readable path analysis instead of raw terminal output alone.</p>
+            </article>
+            <article>
+                <strong>Platform Mindset</strong>
+                <p>Config validation, response compression, and forwarded header support.</p>
+            </article>
+            <article>
+                <strong>Portfolio Fit</strong>
+                <p>A project story that maps cleanly to infra and cloud roles.</p>
+            </article>
+        </div>
+    </aside>
+</section>
+
+<section class="capability-grid">
+    <article class="capability-card">
+        <span class="metric-label">Signal</span>
+        <h2>Spot the likely fault domain faster</h2>
+        <p>Surface packet loss, latency jumps, timeouts, and hop classification in one place.</p>
+    </article>
+    <article class="capability-card">
+        <span class="metric-label">Context</span>
+        <h2>Add PTR, geo, ASN, and ISP clues</h2>
+        <p>Public hops are enriched to make the path easier to reason about during triage.</p>
+    </article>
+    <article class="capability-card">
+        <span class="metric-label">Operations</span>
+        <h2>Expose a small but intentional app surface</h2>
+        <p>The app includes health checks, runtime metadata, safer input handling, and exportable artifacts.</p>
+    </article>
 </section>
 
 <section class="layout-grid">
     <div class="panel control-panel">
         <div class="panel-heading">
-            <h2>分析設定</h2>
-            <span>支援網址、網域與 IP</span>
+            <h2>Run Analysis</h2>
+            <span>Hostname, IP, or full URL</span>
         </div>
-        <p>若輸入完整網址，系統會自動擷取 host 後再執行診斷。</p>
+        <p>Paste a target directly, or use a sample below to demo the workflow quickly.</p>
+
+        <div class="sample-row" aria-label="Sample targets">
+            <button type="button" class="sample-chip" data-sample-target="1.1.1.1">1.1.1.1</button>
+            <button type="button" class="sample-chip" data-sample-target="8.8.8.8">8.8.8.8</button>
+            <button type="button" class="sample-chip" data-sample-target="github.com">github.com</button>
+            <button type="button" class="sample-chip" data-sample-target="cloudflare.com">cloudflare.com</button>
+        </div>
 
         <form method="post" id="analyze-form">
             <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
 
-            <label asp-for="TargetHost" class="field-label">目標主機</label>
-            <input asp-for="TargetHost" class="text-input" placeholder="例如 1.1.1.1 或 https://example.com/path" />
+            <label asp-for="TargetHost" class="field-label">Target</label>
+            <input asp-for="TargetHost" class="text-input" placeholder="Example: 1.1.1.1 or https://example.com" />
 
-            <label asp-for="PingCount" class="field-label">Ping 次數</label>
+            <label asp-for="PingCount" class="field-label">Ping Probes</label>
             <input asp-for="PingCount" class="text-input" type="number" min="3" max="10" />
 
             <div class="action-row">
                 <button type="submit" class="btn-check" id="analyze-button">
-                    <span class="btn-text">開始分析</span>
-                    <span class="btn-loading" aria-hidden="true">分析中...</span>
+                    <span class="btn-text">Analyze Route</span>
+                    <span class="btn-loading" aria-hidden="true">Running...</span>
                 </button>
             </div>
 
             <div class="submit-status" id="submit-status" aria-live="polite">
-                正在執行 ping 與 tracert，請稍候。
+                Running ICMP probes and traceroute. This can take a little while depending on the path.
             </div>
         </form>
 
-        @if (Model.Report is not null)
+        @if (hasReport)
         {
             <div class="export-group">
                 <form method="post" asp-page-handler="ExportJson">
                     <input type="hidden" asp-for="TargetHost" />
                     <input type="hidden" asp-for="PingCount" />
-                    <button type="submit" class="btn-secondary">匯出 JSON</button>
+                    <button type="submit" class="btn-secondary">Export JSON</button>
                 </form>
                 <form method="post" asp-page-handler="ExportCsv">
                     <input type="hidden" asp-for="TargetHost" />
                     <input type="hidden" asp-for="PingCount" />
-                    <button type="submit" class="btn-secondary">匯出 CSV</button>
+                    <button type="submit" class="btn-secondary">Export CSV</button>
                 </form>
             </div>
         }
@@ -72,104 +113,172 @@
 
     <div class="panel summary-panel">
         <div class="summary-head">
-            <h2>診斷摘要</h2>
-            @if (Model.Report is not null)
+            <h2>Executive Summary</h2>
+            @if (hasReport)
             {
-                <span>目標: @Model.Report.TargetHost</span>
+                <span>Target: @Model.Report!.TargetHost</span>
             }
         </div>
 
-        @if (Model.Report is null)
+        @if (!hasReport)
         {
             <div class="empty-state">
-                <p>尚未執行分析。填入目標主機後按下開始分析。</p>
+                <p>
+                    Run a diagnostic to generate an operator-style summary, route timeline, path map, and raw traceroute evidence.
+                </p>
             </div>
         }
         else
         {
+            <div class="status-row">
+                <span class="@Model.GetStatusClass()">@Model.Report!.StatusLabel</span>
+                <p>@Model.Report.StatusSummary</p>
+            </div>
+
             <div class="summary-grid">
                 <article class="metric-card">
-                    <span class="metric-label">平均延遲</span>
+                    <span class="metric-label">Average latency</span>
                     <strong>@(Model.Report.PingSummary.AverageRoundTripMs?.ToString() ?? "-") ms</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">封包遺失</span>
+                    <span class="metric-label">Packet loss</span>
                     <strong>@Model.Report.PingSummary.PacketLossPercent%</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">最高 hop 延遲</span>
-                    <strong>@(Model.Report.Hops.Where(static hop => hop.AverageLatencyMs.HasValue).Select(static hop => hop.AverageLatencyMs!.Value).DefaultIfEmpty().Max()) ms</strong>
+                    <span class="metric-label">Jitter</span>
+                    <strong>@Model.JitterDisplay</strong>
                 </article>
                 <article class="metric-card">
-                    <span class="metric-label">可疑瓶頸</span>
-                    <strong>@(Model.Report.SuspectedIssue ?? "未觀察到明顯瓶頸")</strong>
+                    <span class="metric-label">Geo coverage</span>
+                    <strong>@Model.GeoCoverageDisplay</strong>
                 </article>
             </div>
 
             <p class="summary-text">@Model.Report.Narrative</p>
+
+            <div class="meta-grid">
+                <article class="meta-card">
+                    <span class="metric-label">Execution ID</span>
+                    <strong>@Model.Report.ExecutionId</strong>
+                </article>
+                <article class="meta-card">
+                    <span class="metric-label">Generated</span>
+                    <strong>@Model.GeneratedAtDisplay</strong>
+                </article>
+                <article class="meta-card">
+                    <span class="metric-label">Duration</span>
+                    <strong>@Model.Report.DurationMs ms</strong>
+                </article>
+                <article class="meta-card">
+                    <span class="metric-label">Ping range</span>
+                    <strong>@Model.PingRangeDisplay</strong>
+                </article>
+                <article class="meta-card meta-card-wide">
+                    <span class="metric-label">Runtime</span>
+                    <strong>@Model.Report.RuntimeSummary</strong>
+                </article>
+                <article class="meta-card meta-card-wide">
+                    <span class="metric-label">Mode</span>
+                    <strong>@Model.Report.DiagnosticMode</strong>
+                </article>
+            </div>
         }
     </div>
 </section>
 
-@if (Model.Report is not null)
+@if (hasReport)
 {
     <section class="panel diagnostics-panel">
         <div class="summary-head">
-            <h2>檢查指標</h2>
-            <span>分析後檢視</span>
+            <h2>Evidence & Metadata</h2>
+            <span>Generated after each run</span>
         </div>
 
-        <div class="diagnostics-grid">
+        <div class="diagnostics-grid diagnostics-grid-six">
             <article class="diagnostic-card">
-                <span class="metric-label">Geo 成功</span>
-                <strong>@Model.GeoResolvedCount</strong>
-                <p>成功補到地區資訊的 hop 數量。</p>
+                <span class="metric-label">Success rate</span>
+                <strong>@Model.Report!.PingSummary.SuccessRatePercent%</strong>
+                <p>Successful ICMP replies across all configured ping probes.</p>
             </article>
             <article class="diagnostic-card">
-                <span class="metric-label">Geo 落空</span>
-                <strong>@Model.GeoLookupMissCount</strong>
-                <p>符合 public hop 條件但沒有查到地理資訊的 hop。</p>
-            </article>
-            <article class="diagnostic-card">
-                <span class="metric-label">Timeout hop</span>
+                <span class="metric-label">Timeout hops</span>
                 <strong>@Model.TimeoutCount</strong>
-                <p>沒有回覆 ICMP 的 hop 數量。</p>
+                <p>Hops that did not answer ICMP during the traceroute run.</p>
             </article>
             <article class="diagnostic-card">
-                <span class="metric-label">Latency spike</span>
+                <span class="metric-label">Latency spikes</span>
                 <strong>@Model.SpikeCount</strong>
-                <p>相較前一跳有明顯延遲升高的 hop。</p>
+                <p>Hops where latency increases sharply compared with the previous hop.</p>
+            </article>
+            <article class="diagnostic-card">
+                <span class="metric-label">Public hops</span>
+                <strong>@Model.PublicHopCount</strong>
+                <p>Reachable hops classified as public, transit, ISP edge, or destination.</p>
+            </article>
+            <article class="diagnostic-card">
+                <span class="metric-label">Geo misses</span>
+                <strong>@Model.GeoLookupMissCount</strong>
+                <p>Public hops that did not return geo data from the enrichment provider.</p>
+            </article>
+            <article class="diagnostic-card">
+                <span class="metric-label">Geo provider</span>
+                <strong>@Model.Report.GeoDataProvider</strong>
+                <p>External data source used to enrich public IP hops with location context.</p>
             </article>
         </div>
-
-        @if (Model.GeoResolvedCount == 0 && Model.GeoLookupMissCount > 0)
-        {
-            <p class="diagnostic-note">
-                目前 public hop 沒有拿到地理資訊，可能是外部 lookup 服務暫時無回應，或該 IP 沒有公開資料。
-            </p>
-        }
     </section>
 }
 
+<section class="panel ops-panel">
+    <div class="summary-head">
+        <h2>Why This Reads Well For Infra / SRE / Cloud Roles</h2>
+        <span>Operator-focused product choices</span>
+    </div>
+
+    <div class="ops-grid">
+        <article class="ops-card">
+            <h3>Operational Surface</h3>
+            <p>
+                The host is configured with response compression, forwarded header handling, startup config validation,
+                and a JSON health endpoint at <a class="inline-link" href="/healthz" target="_blank" rel="noreferrer">/healthz</a>.
+            </p>
+        </article>
+        <article class="ops-card">
+            <h3>Diagnostics Story</h3>
+            <p>
+                Instead of dumping command output, the app frames results as a triage artifact: status level, likely issue,
+                supporting metrics, and raw evidence for follow-up.
+            </p>
+        </article>
+        <article class="ops-card">
+            <h3>Portfolio Positioning</h3>
+            <p>
+                This project is intentionally more aligned with observability and troubleshooting than typical CRUD portfolio apps,
+                which makes the GitHub story stronger for platform-focused roles.
+            </p>
+        </article>
+    </div>
+</section>
+
 <section class="panel route-panel">
     <div class="summary-head">
-        <h2>路徑檢視</h2>
-        @if (Model.Report is not null)
+        <h2>Route Views</h2>
+        @if (hasReport)
         {
-            <span>@Model.Report.Hops.Count 跳</span>
+            <span>@Model.Report!.Hops.Count hops</span>
         }
     </div>
 
     <div class="view-tabs" role="tablist" aria-label="Route views">
-        <button type="button" class="view-tab is-active" data-view-target="timeline-view">Hop 時間軸</button>
-        <button type="button" class="view-tab" data-view-target="map-view">路徑地圖</button>
-        <button type="button" class="view-tab" data-view-target="raw-view">原始輸出</button>
+        <button type="button" class="view-tab is-active" data-view-target="timeline-view" aria-selected="true">Hop Timeline</button>
+        <button type="button" class="view-tab" data-view-target="map-view" aria-selected="false">Path Map</button>
+        <button type="button" class="view-tab" data-view-target="raw-view" aria-selected="false">Raw Output</button>
     </div>
 
-    @if (Model.Report is null || Model.Report.Hops.Count == 0)
+    @if (!hasReport || Model.Report!.Hops.Count == 0)
     {
         <div class="empty-state">
-            <p>目前沒有 hop 資料。</p>
+            <p>No hop data is available yet.</p>
         </div>
     }
     else
@@ -201,7 +310,7 @@
                                     }
                                     else if (!hop.IsTimeout && hop.ScopeLabel is "Public hop" or "Transit hop" or "Access / ISP edge")
                                     {
-                                        <p class="hop-subline">Location: lookup unavailable</p>
+                                        <p class="hop-subline">Location: enrichment unavailable</p>
                                     }
                                     @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Isp) || !string.IsNullOrWhiteSpace(hop.GeoDetails?.Asn))
                                     {
@@ -233,7 +342,7 @@
                             </div>
                             <div class="hop-metrics">
                                 <strong>@(hop.AverageLatencyMs?.ToString() ?? "*") ms</strong>
-                                <span>Δ @(hop.LatencyDeltaMs?.ToString() ?? "-") ms</span>
+                                <span>Delta: @(hop.LatencyDeltaMs?.ToString() ?? "-") ms</span>
                                 @if (!string.IsNullOrWhiteSpace(hop.GeoDetails?.Timezone))
                                 {
                                     <span>@hop.GeoDetails!.Timezone</span>
@@ -255,29 +364,29 @@
             }
             <div class="map-metrics">
                 <article class="map-metric">
-                    <span class="metric-label">Public hop</span>
+                    <span class="metric-label">Public hops</span>
                     <strong>@Model.PublicHopCount</strong>
                 </article>
                 <article class="map-metric">
-                    <span class="metric-label">Geocoded hop</span>
+                    <span class="metric-label">Geocoded hops</span>
                     <strong>@Model.CoordinateHopCount</strong>
                 </article>
                 <article class="map-metric">
-                    <span class="metric-label">Geo 缺漏</span>
+                    <span class="metric-label">Geo misses</span>
                     <strong>@Model.GeoLookupMissCount</strong>
                 </article>
             </div>
 
             <div class="map-legend" aria-label="Map legend">
-                <span class="legend-item"><i class="legend-dot legend-dot-private"></i>本地 / 私有網段</span>
-                <span class="legend-item"><i class="legend-dot legend-dot-public"></i>公網路徑</span>
-                <span class="legend-item"><i class="legend-dot legend-dot-spike"></i>延遲升高</span>
-                <span class="legend-item"><i class="legend-dot legend-dot-missing"></i>缺少 Geo</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-private"></i>Private network</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-public"></i>Public path</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-spike"></i>Latency spike</span>
+                <span class="legend-item"><i class="legend-dot legend-dot-missing"></i>Missing geo</span>
             </div>
 
             @if (Model.CoordinateHopCount == 0)
             {
-                <p class="map-note">目前沒有 public hop 的地理座標，因此此視圖會依 hop 順序展開，而不是實際地圖位置。</p>
+                <p class="map-note">No public hop returned coordinates, so this view falls back to a staged route layout rather than geographic placement.</p>
             }
 
             <div class="geo-map-canvas">
@@ -336,8 +445,9 @@
         <div class="route-view" id="raw-view">
             <div class="raw-panel">
                 <div class="raw-summary">
-                    <span>Ping: @(Model.Report.PingSummary.AverageRoundTripMs?.ToString() ?? "-") ms avg</span>
+                    <span>Ping avg: @(Model.Report.PingSummary.AverageRoundTripMs?.ToString() ?? "-") ms</span>
                     <span>Loss: @Model.Report.PingSummary.PacketLossPercent%</span>
+                    <span>Success: @Model.Report.PingSummary.SuccessRatePercent%</span>
                     <span>Hops: @Model.Report.Hops.Count</span>
                 </div>
                 <pre class="raw-output">@string.Join(Environment.NewLine, Model.Report.RawTracerouteLines)</pre>
@@ -345,32 +455,3 @@
         </div>
     }
 </section>
-
-@section Scripts {
-    <script>
-        (() => {
-            const form = document.getElementById("analyze-form");
-            const button = document.getElementById("analyze-button");
-
-            if (!form || !button) {
-                return;
-            }
-
-            form.addEventListener("submit", () => {
-                button.disabled = true;
-                button.classList.add("is-loading");
-                document.body.classList.add("is-submitting");
-            });
-
-            document.querySelectorAll("[data-view-target]").forEach((tab) => {
-                tab.addEventListener("click", () => {
-                    const target = tab.getAttribute("data-view-target");
-                    document.querySelectorAll(".view-tab").forEach((item) => item.classList.remove("is-active"));
-                    document.querySelectorAll(".route-view").forEach((panel) => panel.classList.remove("is-active"));
-                    tab.classList.add("is-active");
-                    document.getElementById(target)?.classList.add("is-active");
-                });
-            });
-        })();
-    </script>
-}
