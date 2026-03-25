@@ -1,132 +1,131 @@
-﻿# Route Analyzer
+# Route Analyzer
 
-Route Analyzer is a practical network diagnostics toolkit for infrastructure, SRE, DevOps, and cloud workflows.
-It now ships as a full toolchain:
+Route Analyzer is a client-side network diagnostics EXE for helpdesk and remote support workflows.
+It is designed for the situation where a user says "remote access is slow" and IT needs evidence that separates local Wi-Fi, ISP, transit, DNS, and company-side service problems.
 
-- `RouteAnalyzer` (Web UI + API)
-- `RouteAnalyzer.Cli` (local command-line executable)
-- `RouteAnalyzer.Core` (shared diagnostics engine)
+## What It Does
 
-The goal is simple: run diagnostics where the problem actually happens, then export and share incident-ready evidence.
+- Runs on the affected machine, not just on the server side
+- Supports a reusable helpdesk profile with fixed DNS and TCP checks
+- Runs:
+  - ICMP ping
+  - traceroute / tracert
+  - DNS lookups
+  - TCP connectivity checks
+- Produces:
+  - a user-friendly summary
+  - an IT-focused summary
+  - a full report bundle with `summary.txt`, `report.json`, `report.html`, and `route-hops.csv`
+- Adds automatic fault-domain hints such as:
+  - local network or Wi-Fi
+  - ISP / access network
+  - public transit path
+  - company edge or destination service
+  - DNS or initial connectivity
 
-## Architecture
+## Solution Shape
 
-- **RouteAnalyzer.Core**
-  - Shared models/options/services used by both Web and CLI.
-  - Runs ICMP ping + platform traceroute command (`tracert` on Windows, `traceroute` on Linux/macOS).
-  - Produces a structured route report with status labels, hop metadata, and optional geo enrichment.
-- **RouteAnalyzer (Web)**
-  - Razor Pages dashboard for visual review.
-  - Programmatic API under `/api/v1`.
-  - Operational endpoint `/healthz`.
-- **RouteAnalyzer.Cli**
-  - Runs directly on the suspect machine.
-  - Outputs `text`, `json`, or `csv`.
+- `RouteAnalyzer.Core`
+  - Diagnostics engine, profile loader, attribution logic, and report exporters
+- `RouteAnalyzer.Cli`
+  - EXE entry point for support staff or end users
+- `RouteAnalyzer.Tests`
+  - Unit tests for parsing, attribution, and report generation
 
-## Why This Is Useful In Real Incidents
+## Profile-Driven Mode
 
-If a user says "this specific laptop is slow", server-side diagnostics alone are not enough.
-With this setup you can:
+The intended helpdesk workflow is profile-driven.
+A profile defines the main target plus any DNS or TCP checks that should always run for your environment.
 
-1. Run CLI on the affected machine for local path truth.
-2. Export JSON/CSV as incident evidence.
-3. Use the Web UI/API for visualization and integration.
+Example profile file: `routeanalyzer.profile.example.json`
 
-## Web API
+The CLI also knows how to generate one:
 
-Base path: `/api/v1`
-
-- `GET /api/v1/info`
-- `GET /api/v1/diagnostics/sample-targets`
-- `POST /api/v1/diagnostics/route`
-
-Example request:
-
-```json
-{
-  "targetHost": "1.1.1.1",
-  "pingCount": 4,
-  "maxHops": 24,
-  "includeGeoDetails": true
-}
+```powershell
+dotnet run --project RouteAnalyzer.Cli -- --create-sample-profile
 ```
 
-## CLI Usage
+If a file named `routeanalyzer.profile.json` exists in the current directory or next to the EXE, running the EXE without arguments will use it automatically.
 
-```bash
-dotnet run --project RouteAnalyzer.Cli -- --target 1.1.1.1 --ping-count 5 --max-hops 24
+## Quick Start
+
+Run with a helpdesk profile:
+
+```powershell
+dotnet run --project RouteAnalyzer.Cli -- --profile-file .\routeanalyzer.profile.json
 ```
 
-Output format examples:
+Run an ad hoc quick diagnostic:
 
-```bash
-# JSON to console
-dotnet run --project RouteAnalyzer.Cli -- --target github.com --format json
-
-# CSV file
-dotnet run --project RouteAnalyzer.Cli -- --target cloudflare.com --format csv --output .\reports\route.csv
-
-# No geo lookup
-dotnet run --project RouteAnalyzer.Cli -- --target 8.8.8.8 --no-geo
+```powershell
+dotnet run --project RouteAnalyzer.Cli -- --target vpn.example.com
 ```
 
-### CLI Arguments
+Generate only console output:
 
-- `--target <value>` hostname, IP, or URL
+```powershell
+dotnet run --project RouteAnalyzer.Cli -- --target 127.0.0.1 --console-only --format text
+```
+
+Write the full report bundle to a specific directory:
+
+```powershell
+dotnet run --project RouteAnalyzer.Cli -- --profile-file .\routeanalyzer.profile.json --report-dir .\reports\case-001
+```
+
+## Output Bundle
+
+By default, the CLI writes a bundle under `.\reports\<timestamp-target>\`.
+
+Bundle contents:
+
+- `summary.txt`
+- `report.json`
+- `report.html`
+- `route-hops.csv`
+
+The HTML report contains:
+
+- traffic-light style overall status
+- user summary
+- IT summary
+- DNS check table
+- TCP check table
+- route hop table
+- raw traceroute output
+
+## CLI Options
+
+- `--profile-file <path>`
+- `--target <value>`
 - `--ping-count <3-10>`
 - `--max-hops <4-64>`
-- `--format <text|json|csv>`
+- `--format <bundle|text|json|csv|html>`
 - `--output <path>`
+- `--report-dir <path>`
+- `--console-only`
+- `--create-sample-profile [path]`
+- `--force`
 - `--no-geo`
 - `--help`
 
 ## Publish EXE
 
-PowerShell helper:
-
 ```powershell
-./scripts/publish-cli.ps1 -Runtime win-x64
+./scripts/publish-cli.ps1 -Runtime win-x64 -Configuration Release
 ```
 
-Artifacts output to `artifacts/cli/<runtime>`.
-
-## Local Run (Web)
-
-```bash
-dotnet run --project RouteAnalyzer.csproj
-```
-
-Then open the local URL and use the Diagnostics page.
+Artifacts are written to `artifacts/cli/<runtime>`.
 
 ## Verification
 
-```bash
+```powershell
 dotnet build RouteAnalyzer.sln
-dotnet test RouteAnalyzer.sln --no-build
+dotnet test RouteAnalyzer.sln
 ```
-
-## Operational Surface
-
-- `GET /healthz` health JSON
-- Response compression enabled
-- Forwarded headers handling enabled
-- Options validation on startup
-- API rate limit on route diagnostics endpoint
-
-## Configuration
-
-`appsettings.json` -> `RouteAnalyzer` section:
-
-- `DefaultTarget`
-- `DefaultPingCount`
-- `DefaultMaxHops`
-- `DefaultIncludeGeoDetails`
-- `PingTimeoutMs`
-- `TracerouteProbeTimeoutMs`
-- `TracerouteProcessTimeoutSeconds`
 
 ## Current Limitations
 
-- Traceroute command availability depends on host environment (`tracert`/`traceroute` presence and permissions).
-- Geo enrichment depends on upstream API availability.
-- This tool is designed for point-in-time diagnosis, not continuous telemetry collection.
+- `tracert` / `traceroute` must exist on the host
+- Geo enrichment depends on `ipwho.is`
+- The tool is still point-in-time diagnostics, not continuous monitoring

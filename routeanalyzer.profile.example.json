@@ -1,0 +1,31 @@
+{
+  "profileName": "Remote Support - VPN",
+  "companyName": "Contoso",
+  "description": "One-click checks for users who report slow VPN or remote desktop sessions.",
+  "targetHost": "vpn.example.com",
+  "pingCount": 4,
+  "maxHops": 24,
+  "includeGeoDetails": true,
+  "dnsLookups": [
+    {
+      "name": "VPN gateway DNS",
+      "hostname": "vpn.example.com"
+    },
+    {
+      "name": "Portal DNS",
+      "hostname": "portal.example.com"
+    }
+  ],
+  "tcpEndpoints": [
+    {
+      "name": "VPN gateway HTTPS",
+      "host": "vpn.example.com",
+      "port": 443
+    },
+    {
+      "name": "Remote desktop gateway",
+      "host": "rdg.example.com",
+      "port": 443
+    }
+  ]
+}

@@ -1,10 +1,11 @@
-﻿using System.Text;
+using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using RouteAnalyzer.Models;
 using RouteAnalyzer.Options;
 using RouteAnalyzer.Services;
 
+Console.OutputEncoding = Encoding.UTF8;
 var exitCode = await CliApplication.RunAsync(args);
 return exitCode;
 
@@ -25,42 +26,21 @@ internal static class CliApplication
             return parseResult.ShowHelp ? 0 : 1;
         }
 
-        var options = new RouteAnalyzerOptions();
-        var pingCount = parseResult.PingCount ?? options.DefaultPingCount;
-        var maxHops = parseResult.MaxHops ?? options.DefaultMaxHops;
-        var includeGeoDetails = parseResult.IncludeGeoDetails ?? options.DefaultIncludeGeoDetails;
-
-        if (!TargetHostParser.TryNormalize(parseResult.TargetHost!, out var normalizedTarget))
-        {
-            Console.Error.WriteLine("Target must be a valid hostname, IP address, or URL.");
-            return 1;
-        }
-
-        if (pingCount is < RouteAnalyzerOptions.MinPingCount or > RouteAnalyzerOptions.MaxPingCount)
-        {
-            Console.Error.WriteLine($"Ping count must be between {RouteAnalyzerOptions.MinPingCount} and {RouteAnalyzerOptions.MaxPingCount}.");
-            return 1;
-        }
-
-        if (maxHops is < RouteAnalyzerOptions.MinMaxHops or > RouteAnalyzerOptions.MaxMaxHops)
-        {
-            Console.Error.WriteLine($"Max hops must be between {RouteAnalyzerOptions.MinMaxHops} and {RouteAnalyzerOptions.MaxMaxHops}.");
-            return 1;
-        }
-
-        var analysisOptions = new RouteAnalyzerOptions
-        {
-            DefaultTarget = normalizedTarget,
-            DefaultPingCount = pingCount,
-            DefaultMaxHops = maxHops,
-            DefaultIncludeGeoDetails = includeGeoDetails,
-            PingTimeoutMs = options.PingTimeoutMs,
-            TracerouteProbeTimeoutMs = options.TracerouteProbeTimeoutMs,
-            TracerouteProcessTimeoutSeconds = options.TracerouteProcessTimeoutSeconds
-        };
-
         try
         {
+            if (parseResult.CreateSampleProfile)
+            {
+                var samplePath = parseResult.SampleProfilePath
+                    ?? Path.Combine(Directory.GetCurrentDirectory(), DiagnosticProfileLoader.DefaultFileName);
+
+                DiagnosticProfileLoader.WriteSampleProfile(samplePath, overwrite: parseResult.Force);
+                Console.WriteLine($"Sample profile written to: {Path.GetFullPath(samplePath)}");
+                return 0;
+            }
+
+            var options = new RouteAnalyzerOptions();
+            var profileResolution = ResolveExecutionProfile(parseResult, options);
+
             using var httpClient = new HttpClient
             {
                 BaseAddress = new Uri("https://ipwho.is/"),
@@ -68,38 +48,30 @@ internal static class CliApplication
             };
 
             var geoService = new IpGeoLookupService(httpClient, NullLogger<IpGeoLookupService>.Instance);
-            var diagnosticService = new NetworkRouteDiagnosticService(
+            var routeDiagnosticService = new NetworkRouteDiagnosticService(
                 geoService,
                 NullLogger<NetworkRouteDiagnosticService>.Instance,
-                Options.Create(analysisOptions));
+                Options.Create(options));
+            var supportDiagnosticService = new SupportDiagnosticService(
+                routeDiagnosticService,
+                NullLogger<SupportDiagnosticService>.Instance,
+                Options.Create(options));
 
-            var report = await diagnosticService.AnalyzeAsync(new RouteAnalysisRequest
-            {
-                TargetHost = normalizedTarget,
-                PingCount = pingCount,
-                MaxHops = maxHops,
-                IncludeGeoDetails = includeGeoDetails
-            }, CancellationToken.None);
+            var report = await supportDiagnosticService.RunAsync(profileResolution.Profile, CancellationToken.None);
 
-            var output = BuildOutput(report, parseResult.Format);
-            if (!string.IsNullOrWhiteSpace(parseResult.OutputPath))
+            if (!string.IsNullOrWhiteSpace(profileResolution.ProfilePath))
             {
-                var path = Path.GetFullPath(parseResult.OutputPath);
-                var directory = Path.GetDirectoryName(path);
-                if (!string.IsNullOrWhiteSpace(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                await File.WriteAllTextAsync(path, output, Encoding.UTF8);
-                Console.WriteLine($"Report saved to: {path}");
-            }
-            else
-            {
-                Console.WriteLine(output);
+                Console.WriteLine($"Profile : {profileResolution.Profile.ProfileName}");
+                Console.WriteLine($"Source  : {profileResolution.ProfilePath}");
             }
 
+            await EmitOutputsAsync(report, parseResult);
             return 0;
+        }
+        catch (DiagnosticProfileException ex)
+        {
+            Console.Error.WriteLine($"Profile error: {ex.Message}");
+            return 1;
         }
         catch (Exception ex)
         {
@@ -108,14 +80,159 @@ internal static class CliApplication
         }
     }
 
-    private static string BuildOutput(RouteDiagnosticReport report, string format)
+    private static async Task EmitOutputsAsync(SupportDiagnosticReport report, CliArguments arguments)
+    {
+        var summary = BuildConsoleSummary(report);
+        Console.WriteLine(summary);
+
+        if (arguments.ConsoleOnly)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(arguments.ReportDirectory) || string.Equals(arguments.Format, "bundle", StringComparison.OrdinalIgnoreCase))
+        {
+            var reportDirectory = arguments.ReportDirectory
+                ?? arguments.OutputPath
+                ?? Path.Combine(Directory.GetCurrentDirectory(), "reports", SupportDiagnosticExportFormatter.BuildDefaultDirectoryName(report));
+
+            var bundle = SupportDiagnosticExportFormatter.WriteBundle(report, reportDirectory);
+            Console.WriteLine();
+            Console.WriteLine($"Report bundle saved to: {bundle.DirectoryPath}");
+            Console.WriteLine($"  summary : {bundle.SummaryPath}");
+            Console.WriteLine($"  json    : {bundle.JsonPath}");
+            Console.WriteLine($"  html    : {bundle.HtmlPath}");
+            Console.WriteLine($"  route   : {bundle.RouteCsvPath}");
+            return;
+        }
+
+        var output = BuildSingleOutput(report, arguments.Format);
+        if (!string.IsNullOrWhiteSpace(arguments.OutputPath))
+        {
+            var fullPath = Path.GetFullPath(arguments.OutputPath);
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await File.WriteAllTextAsync(fullPath, output, Encoding.UTF8);
+            Console.WriteLine();
+            Console.WriteLine($"Report saved to: {fullPath}");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(output);
+    }
+
+    private static string BuildSingleOutput(SupportDiagnosticReport report, string format)
     {
         return format.ToLowerInvariant() switch
         {
-            "json" => RouteDiagnosticExportFormatter.ToJson(report),
-            "csv" => RouteDiagnosticExportFormatter.ToCsv(report),
-            _ => RouteDiagnosticExportFormatter.ToText(report)
+            "json" => SupportDiagnosticExportFormatter.ToJson(report),
+            "html" => SupportDiagnosticExportFormatter.ToHtml(report),
+            "csv" => RouteDiagnosticExportFormatter.ToCsv(report.PrimaryRoute),
+            _ => SupportDiagnosticExportFormatter.ToText(report)
         };
+    }
+
+    private static string BuildConsoleSummary(SupportDiagnosticReport report)
+    {
+        var dnsPassed = report.DnsResults.Count(static result => result.Success);
+        var tcpPassed = report.TcpResults.Count(static result => result.Success);
+        var builder = new StringBuilder();
+
+        builder.AppendLine("Route Analyzer");
+        builder.AppendLine("--------------");
+        builder.AppendLine($"Status      : {report.Assessment.OverallStatusLabel}");
+        builder.AppendLine($"Fault       : {report.Assessment.FaultDomain}");
+        builder.AppendLine($"Confidence  : {report.Assessment.ConfidenceLabel}");
+        builder.AppendLine($"Target      : {report.Profile.TargetHost}");
+        builder.AppendLine($"Ping Avg    : {report.PrimaryRoute.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms");
+        builder.AppendLine($"Packet Loss : {report.PrimaryRoute.PingSummary.PacketLossPercent}%");
+        builder.AppendLine($"DNS         : {(report.DnsResults.Count == 0 ? "n/a" : $"{dnsPassed}/{report.DnsResults.Count} pass")}");
+        builder.AppendLine($"TCP         : {(report.TcpResults.Count == 0 ? "n/a" : $"{tcpPassed}/{report.TcpResults.Count} pass")}");
+        builder.AppendLine();
+        builder.AppendLine(report.Assessment.UserSummary);
+
+        if (report.Assessment.Recommendations.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("Next steps:");
+            foreach (var recommendation in report.Assessment.Recommendations.Take(3))
+            {
+                builder.AppendLine($"- {recommendation}");
+            }
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private static ProfileResolution ResolveExecutionProfile(CliArguments arguments, RouteAnalyzerOptions options)
+    {
+        var explicitProfilePath = string.IsNullOrWhiteSpace(arguments.ProfilePath)
+            ? null
+            : Path.GetFullPath(arguments.ProfilePath);
+
+        var autoProfilePath = string.IsNullOrWhiteSpace(arguments.TargetHost) && explicitProfilePath is null
+            ? DiagnosticProfileLoader.TryFindDefaultProfilePath()
+            : null;
+
+        var resolvedProfilePath = explicitProfilePath ?? autoProfilePath;
+        DiagnosticProfile profile;
+
+        if (resolvedProfilePath is not null)
+        {
+            profile = DiagnosticProfileLoader.Load(resolvedProfilePath);
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(arguments.TargetHost))
+            {
+                throw new DiagnosticProfileException(
+                    $"No target was provided and no default profile file named {DiagnosticProfileLoader.DefaultFileName} was found.");
+            }
+
+            if (!TargetHostParser.TryNormalize(arguments.TargetHost, out var normalizedTarget))
+            {
+                throw new DiagnosticProfileException("Target must be a valid hostname, IP address, or URL.");
+            }
+
+            profile = new DiagnosticProfile
+            {
+                ProfileName = "Quick Diagnostic",
+                Description = "Ad hoc route diagnostic without a saved helpdesk profile.",
+                TargetHost = normalizedTarget,
+                PingCount = arguments.PingCount ?? options.DefaultPingCount,
+                MaxHops = arguments.MaxHops ?? options.DefaultMaxHops,
+                IncludeGeoDetails = arguments.IncludeGeoDetails ?? options.DefaultIncludeGeoDetails
+            };
+        }
+
+        var overriddenTarget = profile.TargetHost;
+        if (!string.IsNullOrWhiteSpace(arguments.TargetHost))
+        {
+            if (!TargetHostParser.TryNormalize(arguments.TargetHost, out overriddenTarget))
+            {
+                throw new DiagnosticProfileException("Target must be a valid hostname, IP address, or URL.");
+            }
+        }
+
+        var mergedProfile = new DiagnosticProfile
+        {
+            ProfileName = profile.ProfileName,
+            CompanyName = profile.CompanyName,
+            Description = profile.Description,
+            TargetHost = overriddenTarget,
+            PingCount = arguments.PingCount ?? profile.PingCount,
+            MaxHops = arguments.MaxHops ?? profile.MaxHops,
+            IncludeGeoDetails = arguments.IncludeGeoDetails ?? profile.IncludeGeoDetails,
+            DnsLookups = profile.DnsLookups,
+            TcpEndpoints = profile.TcpEndpoints
+        };
+
+        return new ProfileResolution(DiagnosticProfileLoader.Normalize(mergedProfile), resolvedProfilePath);
     }
 
     private static void PrintHelp()
@@ -123,18 +240,32 @@ internal static class CliApplication
         Console.WriteLine("RouteAnalyzer CLI");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  RouteAnalyzer.Cli --target <host> [options]");
-        Console.WriteLine("  RouteAnalyzer.Cli <host> [options]");
+        Console.WriteLine($"  RouteAnalyzer.Cli --profile-file <path-to-{DiagnosticProfileLoader.DefaultFileName}>");
+        Console.WriteLine("  RouteAnalyzer.Cli --target <host>");
+        Console.WriteLine("  RouteAnalyzer.Cli --create-sample-profile [path]");
+        Console.WriteLine();
+        Console.WriteLine("Default behavior:");
+        Console.WriteLine($"  If {DiagnosticProfileLoader.DefaultFileName} exists in the current directory or next to the EXE, running with no arguments uses it.");
+        Console.WriteLine("  If no output is specified, a full report bundle is written to ./reports/<timestamp-target>/.");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --target <value>        Hostname, IP, or URL to analyze.");
-        Console.WriteLine("  --ping-count <value>    Ping probes (3-10).");
-        Console.WriteLine("  --max-hops <value>      Traceroute max hops (4-64).");
-        Console.WriteLine("  --format <value>        text | json | csv. Default: text.");
-        Console.WriteLine("  --output <path>         Write report to a file instead of stdout.");
-        Console.WriteLine("  --no-geo                Disable geo enrichment.");
-        Console.WriteLine("  --help                  Show this help.");
+        Console.WriteLine("  --profile-file <path>         Load a helpdesk profile with DNS/TCP templates.");
+        Console.WriteLine("  --target <value>              Override or supply the primary target host.");
+        Console.WriteLine("  --ping-count <value>          Ping probes (3-10).");
+        Console.WriteLine("  --max-hops <value>            Traceroute max hops (4-64).");
+        Console.WriteLine("  --format <bundle|text|json|csv|html>");
+        Console.WriteLine("                                bundle is the default and writes summary.txt, report.json, report.html, and route-hops.csv.");
+        Console.WriteLine("  --output <path>               File path for single-format output, or bundle directory when format is bundle.");
+        Console.WriteLine("  --report-dir <path>           Explicit directory for a full report bundle.");
+        Console.WriteLine("  --console-only                Print the summary only and skip file output.");
+        Console.WriteLine("  --create-sample-profile [path]");
+        Console.WriteLine("                                Write an editable sample profile JSON.");
+        Console.WriteLine("  --force                       Allow overwriting when creating a sample profile.");
+        Console.WriteLine("  --no-geo                      Disable geo enrichment.");
+        Console.WriteLine("  --help                        Show this help.");
     }
+
+    private sealed record ProfileResolution(DiagnosticProfile Profile, string? ProfilePath);
 }
 
 internal sealed class CliArguments
@@ -145,6 +276,8 @@ internal sealed class CliArguments
 
     public string? ErrorMessage { get; private init; }
 
+    public string? ProfilePath { get; private init; }
+
     public string? TargetHost { get; private init; }
 
     public int? PingCount { get; private init; }
@@ -153,9 +286,19 @@ internal sealed class CliArguments
 
     public bool? IncludeGeoDetails { get; private init; }
 
-    public string Format { get; private init; } = "text";
+    public string Format { get; private init; } = "bundle";
 
     public string? OutputPath { get; private init; }
+
+    public string? ReportDirectory { get; private init; }
+
+    public bool ConsoleOnly { get; private init; }
+
+    public bool CreateSampleProfile { get; private init; }
+
+    public string? SampleProfilePath { get; private init; }
+
+    public bool Force { get; private init; }
 
     public static CliArguments Parse(string[] args)
     {
@@ -163,17 +306,22 @@ internal sealed class CliArguments
         {
             return new CliArguments
             {
-                IsValid = false,
-                ShowHelp = true
+                IsValid = true
             };
         }
 
+        string? profilePath = null;
         string? targetHost = null;
         int? pingCount = null;
         int? maxHops = null;
         bool? includeGeoDetails = null;
-        var format = "text";
+        var format = "bundle";
         string? outputPath = null;
+        string? reportDirectory = null;
+        string? sampleProfilePath = null;
+        var createSampleProfile = false;
+        var consoleOnly = false;
+        var force = false;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -187,6 +335,13 @@ internal sealed class CliArguments
                         IsValid = false,
                         ShowHelp = true
                     };
+
+                case "--profile-file":
+                    if (!TryReadNext(args, ref index, out profilePath))
+                    {
+                        return Invalid("Missing value after --profile-file.");
+                    }
+                    break;
 
                 case "--target":
                     if (!TryReadNext(args, ref index, out targetHost))
@@ -220,9 +375,9 @@ internal sealed class CliArguments
                     }
 
                     format = formatValue.Trim().ToLowerInvariant();
-                    if (format is not ("text" or "json" or "csv"))
+                    if (format is not ("bundle" or "text" or "json" or "csv" or "html"))
                     {
-                        return Invalid("--format must be one of: text, json, csv.");
+                        return Invalid("--format must be one of: bundle, text, json, csv, html.");
                     }
                     break;
 
@@ -233,12 +388,36 @@ internal sealed class CliArguments
                     }
                     break;
 
+                case "--report-dir":
+                    if (!TryReadNext(args, ref index, out reportDirectory))
+                    {
+                        return Invalid("Missing value after --report-dir.");
+                    }
+                    break;
+
+                case "--console-only":
+                    consoleOnly = true;
+                    break;
+
+                case "--create-sample-profile":
+                    createSampleProfile = true;
+                    if (TryPeekNext(args, index, out var samplePathToken) && !IsSwitch(samplePathToken))
+                    {
+                        sampleProfilePath = samplePathToken;
+                        index++;
+                    }
+                    break;
+
+                case "--force":
+                    force = true;
+                    break;
+
                 case "--no-geo":
                     includeGeoDetails = false;
                     break;
 
                 default:
-                    if (token.StartsWith('-'))
+                    if (IsSwitch(token))
                     {
                         return Invalid($"Unknown argument: {token}");
                     }
@@ -248,24 +427,49 @@ internal sealed class CliArguments
             }
         }
 
-        if (string.IsNullOrWhiteSpace(targetHost))
+        if (consoleOnly && !string.IsNullOrWhiteSpace(outputPath))
         {
-            return Invalid("Target is required. Use --target <value> or pass it as the first positional argument.");
+            return Invalid("--console-only cannot be combined with --output.");
+        }
+
+        if (createSampleProfile && (!string.IsNullOrWhiteSpace(profilePath) || !string.IsNullOrWhiteSpace(targetHost)))
+        {
+            return Invalid("--create-sample-profile should be run on its own.");
         }
 
         return new CliArguments
         {
             IsValid = true,
+            ProfilePath = profilePath,
             TargetHost = targetHost,
             PingCount = pingCount,
             MaxHops = maxHops,
             IncludeGeoDetails = includeGeoDetails,
             Format = format,
-            OutputPath = outputPath
+            OutputPath = outputPath,
+            ReportDirectory = reportDirectory,
+            ConsoleOnly = consoleOnly,
+            CreateSampleProfile = createSampleProfile,
+            SampleProfilePath = sampleProfilePath,
+            Force = force
         };
     }
 
     private static bool TryReadNext(string[] args, ref int index, out string value)
+    {
+        var nextIndex = index + 1;
+        if (nextIndex >= args.Length || IsSwitch(args[nextIndex]))
+        {
+            value = string.Empty;
+            return false;
+        }
+
+        value = args[nextIndex];
+        index = nextIndex;
+        return true;
+    }
+
+    private static bool TryPeekNext(string[] args, int index, out string value)
     {
         var nextIndex = index + 1;
         if (nextIndex >= args.Length)
@@ -275,8 +479,12 @@ internal sealed class CliArguments
         }
 
         value = args[nextIndex];
-        index = nextIndex;
         return true;
+    }
+
+    private static bool IsSwitch(string token)
+    {
+        return token.StartsWith('-');
     }
 
     private static CliArguments Invalid(string message)
@@ -289,4 +497,3 @@ internal sealed class CliArguments
         };
     }
 }
-
