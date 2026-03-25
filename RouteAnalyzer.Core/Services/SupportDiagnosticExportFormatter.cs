@@ -131,7 +131,7 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine("    :root { color-scheme: light; --bg: #f4efe6; --panel: #fffdf8; --ink: #1c1b18; --muted: #6a655c; --line: #d7cfbf; --healthy: #2b7a4b; --warning: #b7791f; --action: #b23a2b; --accent: #0d5c63; font-family: 'Segoe UI', Tahoma, sans-serif; }");
         builder.AppendLine("    body { margin: 0; background: radial-gradient(circle at top, #fff7ec 0%, var(--bg) 48%, #ece6db 100%); color: var(--ink); }");
         builder.AppendLine("    .page { max-width: 1100px; margin: 0 auto; padding: 32px 20px 60px; }");
-        builder.AppendLine("    .hero { background: linear-gradient(135deg, rgba(13,92,99,.95), rgba(44,76,102,.92)); color: #f8fbff; border-radius: 24px; padding: 28px; box-shadow: 0 18px 42px rgba(28, 27, 24, .16); }");
+        builder.AppendLine("    .hero { background: rgba(43, 122, 75, 0.08); border-radius: 24px; padding: 28px; box-shadow: 0 18px 42px rgba(28, 27, 24, .16); }");
         builder.AppendLine("    .eyebrow { text-transform: uppercase; letter-spacing: .16em; font-size: 12px; opacity: .8; }");
         builder.AppendLine("    h1, h2, h3 { margin: 0; }");
         builder.AppendLine("    .hero-grid, .meta-grid, .summary-grid, .two-col { display: grid; gap: 16px; }");
@@ -262,6 +262,13 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine("    </section>");
         builder.AppendLine("    <section class=\"panel\">");
         builder.AppendLine("      <h2>Raw Traceroute Output</h2>");
+
+        // 2026/3/25: There's encoding problem below  
+        // �b�W�� 24 ���D�I�W�l�� 172.17.70.36 ������
+        // 1    <1 ms    <1 ms    <1 ms  172.17.68.253
+        // 2     1 ms     1 ms     1 ms  172.17.255.244
+        // 3     1 ms     1 ms     1 ms  172.17.70.36
+        // �l�ܧ����C
         builder.AppendLine($"      <pre>{Encode(string.Join(Environment.NewLine, report.PrimaryRoute.RawTracerouteLines))}</pre>");
         builder.AppendLine("    </section>");
         builder.AppendLine("  </div>");
