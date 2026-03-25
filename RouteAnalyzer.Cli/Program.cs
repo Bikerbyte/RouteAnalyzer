@@ -203,6 +203,7 @@ internal static class CliApplication
             {
                 ProfileName = "Quick Diagnostic",
                 Description = "Ad hoc route diagnostic without a saved helpdesk profile.",
+                PreferredLanguage = arguments.Language ?? ReportLanguage.English,
                 TargetHost = normalizedTarget,
                 PingCount = arguments.PingCount ?? options.DefaultPingCount,
                 MaxHops = arguments.MaxHops ?? options.DefaultMaxHops,
@@ -224,6 +225,7 @@ internal static class CliApplication
             ProfileName = profile.ProfileName,
             CompanyName = profile.CompanyName,
             Description = profile.Description,
+            PreferredLanguage = arguments.Language ?? profile.PreferredLanguage,
             TargetHost = overriddenTarget,
             PingCount = arguments.PingCount ?? profile.PingCount,
             MaxHops = arguments.MaxHops ?? profile.MaxHops,
@@ -258,6 +260,7 @@ internal static class CliApplication
         Console.WriteLine("  --output <path>               File path for single-format output, or bundle directory when format is bundle.");
         Console.WriteLine("  --report-dir <path>           Explicit directory for a full report bundle.");
         Console.WriteLine("  --console-only                Print the summary only and skip file output.");
+        Console.WriteLine("  --language <en|zh-TW>         Set the default report language.");
         Console.WriteLine("  --create-sample-profile [path]");
         Console.WriteLine("                                Write an editable sample profile JSON.");
         Console.WriteLine("  --force                       Allow overwriting when creating a sample profile.");
@@ -294,6 +297,8 @@ internal sealed class CliArguments
 
     public bool ConsoleOnly { get; private init; }
 
+    public string? Language { get; private init; }
+
     public bool CreateSampleProfile { get; private init; }
 
     public string? SampleProfilePath { get; private init; }
@@ -318,6 +323,7 @@ internal sealed class CliArguments
         var format = "bundle";
         string? outputPath = null;
         string? reportDirectory = null;
+        string? language = null;
         string? sampleProfilePath = null;
         var createSampleProfile = false;
         var consoleOnly = false;
@@ -395,6 +401,15 @@ internal sealed class CliArguments
                     }
                     break;
 
+                case "--language":
+                    if (!TryReadNext(args, ref index, out var languageValue))
+                    {
+                        return Invalid("Missing value after --language.");
+                    }
+
+                    language = ReportLanguage.Normalize(languageValue);
+                    break;
+
                 case "--console-only":
                     consoleOnly = true;
                     break;
@@ -449,6 +464,7 @@ internal sealed class CliArguments
             OutputPath = outputPath,
             ReportDirectory = reportDirectory,
             ConsoleOnly = consoleOnly,
+            Language = language,
             CreateSampleProfile = createSampleProfile,
             SampleProfilePath = sampleProfilePath,
             Force = force

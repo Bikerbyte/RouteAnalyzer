@@ -4,6 +4,15 @@ namespace RouteAnalyzer.Services;
 
 public static class DiagnosticAssessmentEngine
 {
+    public const string ScenarioLocalDnsOrInitialConnectivity = "local-dns-or-initial-connectivity";
+    public const string ScenarioCompanyEdgeServiceTcpFailure = "company-edge-service-tcp-failure";
+    public const string ScenarioLocalNetworkOrWifi = "local-network-or-wifi";
+    public const string ScenarioIspOrAccessNetwork = "isp-or-access-network";
+    public const string ScenarioInternetTransitPath = "internet-transit-path";
+    public const string ScenarioCompanyNetworkOrDestinationService = "company-network-or-destination-service";
+    public const string ScenarioNoClearNetworkFaultDetected = "no-clear-network-fault-detected";
+    public const string ScenarioIntermittentOrInconclusive = "intermittent-or-inconclusive";
+
     public static DiagnosticAssessment Assess(
         DiagnosticProfile profile,
         RouteDiagnosticReport route,
@@ -27,10 +36,12 @@ public static class DiagnosticAssessmentEngine
         string confidence;
         string userSummary;
         string itSummary;
+        string scenarioKey;
         List<string> recommendations;
 
         if (dnsResults.Count > 0 && failedDns.Length == dnsResults.Count && route.PingSummary.Received == 0)
         {
+            scenarioKey = ScenarioLocalDnsOrInitialConnectivity;
             overallStatus = "Action Needed";
             faultDomain = "Local DNS or initial connectivity";
             confidence = "High";
@@ -45,6 +56,7 @@ public static class DiagnosticAssessmentEngine
         }
         else if (tcpResults.Count > 0 && failedTcp.Length == tcpResults.Count && routeHealthy && failedDns.Length == 0)
         {
+            scenarioKey = ScenarioCompanyEdgeServiceTcpFailure;
             overallStatus = "Action Needed";
             faultDomain = "Company edge or destination service";
             confidence = "High";
@@ -59,6 +71,7 @@ public static class DiagnosticAssessmentEngine
         }
         else if (firstHopIssue is not null || severeLoss)
         {
+            scenarioKey = ScenarioLocalNetworkOrWifi;
             overallStatus = "Action Needed";
             faultDomain = "Local network or Wi-Fi";
             confidence = firstHopIssue is not null ? "High" : "Medium";
@@ -75,6 +88,7 @@ public static class DiagnosticAssessmentEngine
         }
         else if (accessHopIssue is not null || (firstSpike is not null && firstSpike.HopNumber <= 2))
         {
+            scenarioKey = ScenarioIspOrAccessNetwork;
             overallStatus = "Warning";
             faultDomain = "ISP or access network";
             confidence = "Medium";
@@ -91,6 +105,7 @@ public static class DiagnosticAssessmentEngine
         }
         else if (firstSpike is not null && firstSpike.HopNumber < Math.Max(route.Hops.Count - 1, 3))
         {
+            scenarioKey = ScenarioInternetTransitPath;
             overallStatus = moderateLoss || failedTcp.Length > 0 ? "Warning" : "Healthy";
             faultDomain = "Internet transit path";
             confidence = "Medium";
@@ -105,6 +120,7 @@ public static class DiagnosticAssessmentEngine
         }
         else if (finalHopIssue || failedTcp.Length > 0)
         {
+            scenarioKey = ScenarioCompanyNetworkOrDestinationService;
             overallStatus = failedTcp.Length > 0 ? "Action Needed" : "Warning";
             faultDomain = "Company network or destination service";
             confidence = failedTcp.Length > 0 ? "High" : "Medium";
@@ -121,6 +137,7 @@ public static class DiagnosticAssessmentEngine
         }
         else if (routeHealthy && failedDns.Length == 0 && failedTcp.Length == 0)
         {
+            scenarioKey = ScenarioNoClearNetworkFaultDetected;
             overallStatus = "Healthy";
             faultDomain = "No clear network fault detected";
             confidence = "Medium";
@@ -135,6 +152,7 @@ public static class DiagnosticAssessmentEngine
         }
         else
         {
+            scenarioKey = ScenarioIntermittentOrInconclusive;
             overallStatus = "Warning";
             faultDomain = "Intermittent or inconclusive";
             confidence = "Low";
@@ -152,6 +170,7 @@ public static class DiagnosticAssessmentEngine
 
         return new DiagnosticAssessment
         {
+            ScenarioKey = scenarioKey,
             OverallStatusLabel = overallStatus,
             FaultDomain = faultDomain,
             ConfidenceLabel = confidence,

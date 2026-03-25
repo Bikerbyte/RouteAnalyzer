@@ -2,6 +2,8 @@ namespace RouteAnalyzer.Models;
 
 public sealed class DiagnosticAssessment
 {
+    public required string ScenarioKey { get; init; }
+
     public required string OverallStatusLabel { get; init; }
 
     public required string FaultDomain { get; init; }

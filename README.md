@@ -16,6 +16,7 @@ It is designed for the situation where a user says "remote access is slow" and I
   - a user-friendly summary
   - an IT-focused summary
   - a full report bundle with `summary.txt`, `report.json`, `report.html`, and `route-hops.csv`
+  - bilingual report output with English / Traditional Chinese switching in HTML
 - Adds automatic fault-domain hints such as:
   - local network or Wi-Fi
   - ISP / access network
@@ -87,6 +88,7 @@ Bundle contents:
 The HTML report contains:
 
 - traffic-light style overall status
+- English / Traditional Chinese toggle
 - user summary
 - IT summary
 - DNS check table
@@ -104,6 +106,7 @@ The HTML report contains:
 - `--output <path>`
 - `--report-dir <path>`
 - `--console-only`
+- `--language <en|zh-TW>`
 - `--create-sample-profile [path]`
 - `--force`
 - `--no-geo`

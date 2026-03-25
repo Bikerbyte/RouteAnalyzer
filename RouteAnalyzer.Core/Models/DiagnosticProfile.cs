@@ -8,6 +8,8 @@ public sealed class DiagnosticProfile
 
     public string? Description { get; init; }
 
+    public string PreferredLanguage { get; init; } = ReportLanguage.English;
+
     public required string TargetHost { get; init; }
 
     public int PingCount { get; init; } = 4;

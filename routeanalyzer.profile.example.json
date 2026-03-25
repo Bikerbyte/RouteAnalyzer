@@ -2,6 +2,7 @@
   "profileName": "Remote Support - VPN",
   "companyName": "Contoso",
   "description": "One-click checks for users who report slow VPN or remote desktop sessions.",
+  "preferredLanguage": "en",
   "targetHost": "vpn.example.com",
   "pingCount": 4,
   "maxHops": 24,

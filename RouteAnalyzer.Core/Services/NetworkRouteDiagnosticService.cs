@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -195,7 +196,9 @@ public partial class NetworkRouteDiagnosticService
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                StandardOutputEncoding = ResolveCommandOutputEncoding(),
+                StandardErrorEncoding = ResolveCommandOutputEncoding()
             }
         };
 
@@ -615,6 +618,23 @@ public partial class NetworkRouteDiagnosticService
     private static string BuildRuntimeSummary()
     {
         return $"{RuntimeInformation.OSDescription.Trim()} | .NET {Environment.Version}";
+    }
+
+    private static Encoding ResolveCommandOutputEncoding()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return Encoding.UTF8;
+        }
+
+        try
+        {
+            return Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+        }
+        catch
+        {
+            return Encoding.UTF8;
+        }
     }
 
     private static int? ParseLatency(string value)
