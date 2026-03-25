@@ -1,8 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.Globalization;
-using System.Net;
 using System.Text;
-using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Options;
@@ -32,6 +30,10 @@ public class IndexModel : PageModel
     [BindProperty]
     [Range(RouteAnalyzerOptions.MinPingCount, RouteAnalyzerOptions.MaxPingCount)]
     public int PingCount { get; set; } = RouteAnalyzerOptions.MinPingCount + 1;
+
+    [BindProperty]
+    [Range(RouteAnalyzerOptions.MinMaxHops, RouteAnalyzerOptions.MaxMaxHops)]
+    public int MaxHops { get; set; } = 24;
 
     public RouteDiagnosticReport? Report { get; private set; }
 
@@ -86,13 +88,15 @@ public class IndexModel : PageModel
     {
         TargetHost = _options.DefaultTarget;
         PingCount = _options.DefaultPingCount;
+        MaxHops = _options.DefaultMaxHops;
     }
 
     public async Task OnPostAsync()
     {
         PingCount = Math.Clamp(PingCount, RouteAnalyzerOptions.MinPingCount, RouteAnalyzerOptions.MaxPingCount);
+        MaxHops = Math.Clamp(MaxHops, RouteAnalyzerOptions.MinMaxHops, RouteAnalyzerOptions.MaxMaxHops);
 
-        if (!TryNormalizeTarget(TargetHost, out var normalizedTarget))
+        if (!TargetHostParser.TryNormalize(TargetHost, out var normalizedTarget))
         {
             ModelState.AddModelError(string.Empty, "Enter a valid hostname, IP address, or URL.");
             return;
@@ -104,7 +108,7 @@ public class IndexModel : PageModel
         }
 
         TargetHost = normalizedTarget;
-        Report = await _diagnosticService.AnalyzeAsync(normalizedTarget, PingCount, HttpContext.RequestAborted);
+        Report = await BuildReportAsync(normalizedTarget);
     }
 
     public async Task<IActionResult> OnPostExportJsonAsync()
@@ -115,12 +119,8 @@ public class IndexModel : PageModel
             return Page();
         }
 
-        var json = JsonSerializer.Serialize(report, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
-
-        var fileName = $"route-report-{SanitizeFileName(report.TargetHost)}.json";
+        var json = RouteDiagnosticExportFormatter.ToJson(report);
+        var fileName = RouteDiagnosticExportFormatter.BuildReportFileName(report.TargetHost, "json");
         return File(Encoding.UTF8.GetBytes(json), "application/json", fileName);
     }
 
@@ -132,27 +132,9 @@ public class IndexModel : PageModel
             return Page();
         }
 
-        var csv = new StringBuilder();
-        csv.AppendLine("Hop,Address,Scope,AverageLatencyMs,LatencyDeltaMs,Location,ISP,ASN,Timezone,ReverseDns,Note");
-
-        foreach (var hop in report.Hops)
-        {
-            csv.AppendLine(string.Join(",",
-                Csv(hop.HopNumber.ToString()),
-                Csv(hop.DisplayAddress),
-                Csv(hop.ScopeLabel),
-                Csv(hop.AverageLatencyMs?.ToString() ?? string.Empty),
-                Csv(hop.LatencyDeltaMs?.ToString() ?? string.Empty),
-                Csv(hop.GeoDetails?.Summary ?? string.Empty),
-                Csv(hop.GeoDetails?.Isp ?? string.Empty),
-                Csv(hop.GeoDetails?.Asn ?? string.Empty),
-                Csv(hop.GeoDetails?.Timezone ?? string.Empty),
-                Csv(hop.ReverseDns ?? string.Empty),
-                Csv(hop.Note)));
-        }
-
-        var fileName = $"route-report-{SanitizeFileName(report.TargetHost)}.csv";
-        return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", fileName);
+        var csv = RouteDiagnosticExportFormatter.ToCsv(report);
+        var fileName = RouteDiagnosticExportFormatter.BuildReportFileName(report.TargetHost, "csv");
+        return File(Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
     }
 
     public string GetHopClass(RouteHop hop)
@@ -323,8 +305,9 @@ public class IndexModel : PageModel
     private async Task<RouteDiagnosticReport?> BuildReportOrNullAsync()
     {
         PingCount = Math.Clamp(PingCount, RouteAnalyzerOptions.MinPingCount, RouteAnalyzerOptions.MaxPingCount);
+        MaxHops = Math.Clamp(MaxHops, RouteAnalyzerOptions.MinMaxHops, RouteAnalyzerOptions.MaxMaxHops);
 
-        if (!TryNormalizeTarget(TargetHost, out var normalizedTarget))
+        if (!TargetHostParser.TryNormalize(TargetHost, out var normalizedTarget))
         {
             ModelState.AddModelError(string.Empty, "Enter a valid hostname, IP address, or URL.");
             return null;
@@ -336,60 +319,18 @@ public class IndexModel : PageModel
         }
 
         TargetHost = normalizedTarget;
-        Report = await _diagnosticService.AnalyzeAsync(normalizedTarget, PingCount, HttpContext.RequestAborted);
+        Report = await BuildReportAsync(normalizedTarget);
         return Report;
     }
 
-    private static bool TryNormalizeTarget(string rawValue, out string normalizedTarget)
+    private Task<RouteDiagnosticReport> BuildReportAsync(string normalizedTarget)
     {
-        normalizedTarget = string.Empty;
-        var candidate = rawValue.Trim();
-
-        if (string.IsNullOrWhiteSpace(candidate))
+        return _diagnosticService.AnalyzeAsync(new RouteAnalysisRequest
         {
-            return false;
-        }
-
-        if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
-        {
-            candidate = uri.Host;
-        }
-
-        candidate = candidate.Trim().TrimEnd('.');
-
-        if (candidate.Length == 0
-            || candidate.Length > 255
-            || candidate.Contains(' ')
-            || candidate.Contains('/')
-            || candidate.Contains('\\'))
-        {
-            return false;
-        }
-
-        if (IPAddress.TryParse(candidate, out _))
-        {
-            normalizedTarget = candidate;
-            return true;
-        }
-
-        var hostNameType = Uri.CheckHostName(candidate);
-        if (hostNameType is UriHostNameType.Dns or UriHostNameType.IPv4 or UriHostNameType.IPv6)
-        {
-            normalizedTarget = candidate;
-            return true;
-        }
-
-        return false;
-    }
-
-    private static string SanitizeFileName(string value)
-    {
-        return string.Join("-", value.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries)).Trim();
-    }
-
-    private static string Csv(string value)
-    {
-        var escaped = value.Replace("\"", "\"\"");
-        return $"\"{escaped}\"";
+            TargetHost = normalizedTarget,
+            PingCount = PingCount,
+            MaxHops = MaxHops,
+            IncludeGeoDetails = _options.DefaultIncludeGeoDetails
+        }, HttpContext.RequestAborted);
     }
 }

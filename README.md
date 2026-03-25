@@ -1,49 +1,132 @@
 ﻿# Route Analyzer
 
-Route Analyzer is a .NET 10 Razor Pages tool that turns a single `ping` + `tracert` run into an operator-friendly network path report.
-It is designed as a portfolio project for infra, SRE, DevOps, and cloud-facing roles, so the app emphasizes incident-style summaries,
-exportable evidence, runtime metadata, and a small but intentional operational surface.
+Route Analyzer is a practical network diagnostics toolkit for infrastructure, SRE, DevOps, and cloud workflows.
+It now ships as a full toolchain:
 
-## What This Project Demonstrates
+- `RouteAnalyzer` (Web UI + API)
+- `RouteAnalyzer.Cli` (local command-line executable)
+- `RouteAnalyzer.Core` (shared diagnostics engine)
 
-- Network troubleshooting workflow instead of CRUD-only UI work.
-- Server-side enrichment of traceroute hops with PTR, geo, ASN, and ISP context.
-- Operator-oriented reporting with status levels such as `Stable`, `Observe`, `Investigate`, and `Critical`.
-- Production-minded ASP.NET Core setup with config validation, response compression, forwarded headers, and `/healthz`.
-- Clear separation between page model orchestration, diagnostic services, and presentation.
+The goal is simple: run diagnostics where the problem actually happens, then export and share incident-ready evidence.
 
-## Stack
+## Architecture
 
-- .NET 10
-- ASP.NET Core Razor Pages
-- Native `System.Net.NetworkInformation.Ping`
-- Windows `tracert` parsing
-- `ipwho.is` for public IP enrichment
+- **RouteAnalyzer.Core**
+  - Shared models/options/services used by both Web and CLI.
+  - Runs ICMP ping + platform traceroute command (`tracert` on Windows, `traceroute` on Linux/macOS).
+  - Produces a structured route report with status labels, hop metadata, and optional geo enrichment.
+- **RouteAnalyzer (Web)**
+  - Razor Pages dashboard for visual review.
+  - Programmatic API under `/api/v1`.
+  - Operational endpoint `/healthz`.
+- **RouteAnalyzer.Cli**
+  - Runs directly on the suspect machine.
+  - Outputs `text`, `json`, or `csv`.
 
-## Run Locally
+## Why This Is Useful In Real Incidents
 
-```bash
-dotnet run
+If a user says "this specific laptop is slow", server-side diagnostics alone are not enough.
+With this setup you can:
+
+1. Run CLI on the affected machine for local path truth.
+2. Export JSON/CSV as incident evidence.
+3. Use the Web UI/API for visualization and integration.
+
+## Web API
+
+Base path: `/api/v1`
+
+- `GET /api/v1/info`
+- `GET /api/v1/diagnostics/sample-targets`
+- `POST /api/v1/diagnostics/route`
+
+Example request:
+
+```json
+{
+  "targetHost": "1.1.1.1",
+  "pingCount": 4,
+  "maxHops": 24,
+  "includeGeoDetails": true
+}
 ```
 
-Then open the local app and try targets such as:
+## CLI Usage
 
-- `1.1.1.1`
-- `8.8.8.8`
-- `github.com`
-- `cloudflare.com`
+```bash
+dotnet run --project RouteAnalyzer.Cli -- --target 1.1.1.1 --ping-count 5 --max-hops 24
+```
 
-## Operational Endpoint
+Output format examples:
 
-- `GET /healthz`: simple JSON health output for runtime checks.
+```bash
+# JSON to console
+dotnet run --project RouteAnalyzer.Cli -- --target github.com --format json
+
+# CSV file
+dotnet run --project RouteAnalyzer.Cli -- --target cloudflare.com --format csv --output .\reports\route.csv
+
+# No geo lookup
+dotnet run --project RouteAnalyzer.Cli -- --target 8.8.8.8 --no-geo
+```
+
+### CLI Arguments
+
+- `--target <value>` hostname, IP, or URL
+- `--ping-count <3-10>`
+- `--max-hops <4-64>`
+- `--format <text|json|csv>`
+- `--output <path>`
+- `--no-geo`
+- `--help`
+
+## Publish EXE
+
+PowerShell helper:
+
+```powershell
+./scripts/publish-cli.ps1 -Runtime win-x64
+```
+
+Artifacts output to `artifacts/cli/<runtime>`.
+
+## Local Run (Web)
+
+```bash
+dotnet run --project RouteAnalyzer.csproj
+```
+
+Then open the local URL and use the Diagnostics page.
+
+## Verification
+
+```bash
+dotnet build RouteAnalyzer.sln
+dotnet test RouteAnalyzer.sln --no-build
+```
+
+## Operational Surface
+
+- `GET /healthz` health JSON
+- Response compression enabled
+- Forwarded headers handling enabled
+- Options validation on startup
+- API rate limit on route diagnostics endpoint
+
+## Configuration
+
+`appsettings.json` -> `RouteAnalyzer` section:
+
+- `DefaultTarget`
+- `DefaultPingCount`
+- `DefaultMaxHops`
+- `DefaultIncludeGeoDetails`
+- `PingTimeoutMs`
+- `TracerouteProbeTimeoutMs`
+- `TracerouteProcessTimeoutSeconds`
 
 ## Current Limitations
 
-- Detailed traceroute parsing currently targets Windows.
-- Geo enrichment depends on the availability of the upstream public API.
-- This project focuses on single-run diagnostics rather than continuous monitoring.
-
-## Why It Fits Infra / SRE / Cloud Roles
-
-This project is intentionally positioned as a lightweight diagnostics workbench rather than a generic web app.
-It shows how I think about troubleshooting UX, safe host setup, execution metadata, and operational clarity in addition to UI polish.
+- Traceroute command availability depends on host environment (`tracert`/`traceroute` presence and permissions).
+- Geo enrichment depends on upstream API availability.
+- This tool is designed for point-in-time diagnosis, not continuous telemetry collection.

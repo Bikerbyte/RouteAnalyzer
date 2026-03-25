@@ -1,5 +1,6 @@
 ﻿using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using RouteAnalyzer.Models;
 
 namespace RouteAnalyzer.Services;
@@ -89,3 +90,4 @@ public sealed class IpGeoLookupService(HttpClient httpClient, ILogger<IpGeoLooku
         public string? Isp { get; init; }
     }
 }
+

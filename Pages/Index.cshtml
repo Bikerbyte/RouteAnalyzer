@@ -82,6 +82,9 @@
             <label asp-for="PingCount" class="field-label">Ping Probes</label>
             <input asp-for="PingCount" class="text-input" type="number" min="3" max="10" />
 
+            <label asp-for="MaxHops" class="field-label">Max Hops</label>
+            <input asp-for="MaxHops" class="text-input" type="number" min="4" max="64" />
+
             <div class="action-row">
                 <button type="submit" class="btn-check" id="analyze-button">
                     <span class="btn-text">Analyze Route</span>
@@ -100,11 +103,13 @@
                 <form method="post" asp-page-handler="ExportJson">
                     <input type="hidden" asp-for="TargetHost" />
                     <input type="hidden" asp-for="PingCount" />
+                    <input type="hidden" asp-for="MaxHops" />
                     <button type="submit" class="btn-secondary">Export JSON</button>
                 </form>
                 <form method="post" asp-page-handler="ExportCsv">
                     <input type="hidden" asp-for="TargetHost" />
                     <input type="hidden" asp-for="PingCount" />
+                    <input type="hidden" asp-for="MaxHops" />
                     <button type="submit" class="btn-secondary">Export CSV</button>
                 </form>
             </div>
@@ -170,6 +175,10 @@
                     <strong>@Model.Report.DurationMs ms</strong>
                 </article>
                 <article class="meta-card">
+                    <span class="metric-label">Max hops</span>
+                    <strong>@Model.Report.MaxHops</strong>
+                </article>
+                <article class="meta-card">
                     <span class="metric-label">Ping range</span>
                     <strong>@Model.PingRangeDisplay</strong>
                 </article>
@@ -180,6 +189,10 @@
                 <article class="meta-card meta-card-wide">
                     <span class="metric-label">Mode</span>
                     <strong>@Model.Report.DiagnosticMode</strong>
+                </article>
+                <article class="meta-card meta-card-wide">
+                    <span class="metric-label">Command</span>
+                    <strong>@Model.Report.TracerouteCommand</strong>
                 </article>
             </div>
         }

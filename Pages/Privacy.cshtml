@@ -30,16 +30,24 @@
         <article class="note-card">
             <h2>How It Works</h2>
             <p>
-                The server runs native ICMP probes, parses Windows <code>tracert</code> output, enriches public hops with PTR and geo data,
-                then scores the path as <em>Stable</em>, <em>Observe</em>, <em>Investigate</em>, or <em>Critical</em>.
+                The shared diagnostics engine runs native ICMP probes, executes platform traceroute commands,
+                enriches public hops with PTR and geo data, then scores the path as <em>Stable</em>, <em>Observe</em>, <em>Investigate</em>, or <em>Critical</em>.
+            </p>
+        </article>
+
+        <article class="note-card">
+            <h2>Tooling Modes</h2>
+            <p>
+                This project is now delivered as Web UI + Web API + CLI executable, so diagnostics can be run locally on affected machines
+                and still be consumed in dashboards or automation pipelines.
             </p>
         </article>
 
         <article class="note-card">
             <h2>Current Limits</h2>
             <p>
-                Detailed parsing currently targets Windows. Geo enrichment depends on <code>ipwho.is</code>, and the tool is designed for single-run diagnostics,
-                not long-term telemetry collection.
+                Traceroute command availability depends on host environment. Geo enrichment depends on <code>ipwho.is</code>,
+                and the tool is designed for single-run diagnostics, not long-term telemetry collection.
             </p>
         </article>
     </div>

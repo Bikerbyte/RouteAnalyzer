@@ -1,4 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="RouteAnalyzer.Core\RouteAnalyzer.Core.csproj" />
+  </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -6,4 +10,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="Models\**\*.cs" />
+    <Compile Remove="Options\**\*.cs" />
+    <Compile Remove="Services\**\*.cs" />
+    <Compile Remove="RouteAnalyzer.Core\**\*.cs" />
+    <Compile Remove="RouteAnalyzer.Cli\**\*.cs" />
+    <Compile Remove="RouteAnalyzer.Tests\**\*.cs" />
+  </ItemGroup>
+
 </Project>
+

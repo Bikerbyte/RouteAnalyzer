@@ -4,6 +4,10 @@ public sealed class RouteDiagnosticReport
 {
     public required string TargetHost { get; init; }
 
+    public required int MaxHops { get; init; }
+
+    public required bool GeoDetailsEnabled { get; init; }
+
     public required string ExecutionId { get; init; }
 
     public required DateTimeOffset GeneratedAtUtc { get; init; }
@@ -23,6 +27,8 @@ public sealed class RouteDiagnosticReport
     public required string RuntimeSummary { get; init; }
 
     public required string DiagnosticMode { get; init; }
+
+    public required string TracerouteCommand { get; init; }
 
     public required string GeoDataProvider { get; init; }
 

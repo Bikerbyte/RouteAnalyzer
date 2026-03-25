@@ -1,46 +1,72 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RouteAnalyzer.Models;
+using RouteAnalyzer.Options;
 
 namespace RouteAnalyzer.Services;
 
 public partial class NetworkRouteDiagnosticService
 {
-    private const string DiagnosticMode = "ICMP ping + Windows tracert (-d -w 900)";
     private const string GeoDataProvider = "ipwho.is";
 
     private readonly IpGeoLookupService _ipGeoLookupService;
     private readonly ILogger<NetworkRouteDiagnosticService> _logger;
+    private readonly RouteAnalyzerOptions _options;
 
     public NetworkRouteDiagnosticService(
         IpGeoLookupService ipGeoLookupService,
-        ILogger<NetworkRouteDiagnosticService> logger)
+        ILogger<NetworkRouteDiagnosticService> logger,
+        IOptions<RouteAnalyzerOptions> options)
     {
         _ipGeoLookupService = ipGeoLookupService;
         _logger = logger;
+        _options = options.Value;
     }
 
-    public async Task<RouteDiagnosticReport> AnalyzeAsync(string targetHost, int pingCount, CancellationToken cancellationToken)
+    public Task<RouteDiagnosticReport> AnalyzeAsync(string targetHost, int pingCount, CancellationToken cancellationToken)
+    {
+        var request = new RouteAnalysisRequest
+        {
+            TargetHost = targetHost,
+            PingCount = pingCount,
+            MaxHops = _options.DefaultMaxHops,
+            IncludeGeoDetails = _options.DefaultIncludeGeoDetails
+        };
+
+        return AnalyzeAsync(request, cancellationToken);
+    }
+
+    public async Task<RouteDiagnosticReport> AnalyzeAsync(RouteAnalysisRequest request, CancellationToken cancellationToken)
     {
         var startedAt = DateTimeOffset.UtcNow;
         var stopwatch = Stopwatch.StartNew();
         var executionId = Guid.NewGuid().ToString("n")[..12];
 
+        var normalizedPingCount = Math.Clamp(request.PingCount, RouteAnalyzerOptions.MinPingCount, RouteAnalyzerOptions.MaxPingCount);
+        var normalizedMaxHops = Math.Clamp(request.MaxHops, RouteAnalyzerOptions.MinMaxHops, RouteAnalyzerOptions.MaxMaxHops);
+
         using var scope = _logger.BeginScope(new Dictionary<string, object?>
         {
             ["ExecutionId"] = executionId,
-            ["TargetHost"] = targetHost
+            ["TargetHost"] = request.TargetHost,
+            ["PingCount"] = normalizedPingCount,
+            ["MaxHops"] = normalizedMaxHops
         });
 
         _logger.LogInformation(
-            "Starting route analysis for {TargetHost} with {PingCount} ping probes",
-            targetHost,
-            pingCount);
+            "Starting route analysis for {TargetHost} with {PingCount} ping probes and max {MaxHops} hops",
+            request.TargetHost,
+            normalizedPingCount,
+            normalizedMaxHops);
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        var tracerouteSpec = BuildTracerouteCommandSpec(request.TargetHost, normalizedMaxHops);
+        if (tracerouteSpec is null)
         {
             stopwatch.Stop();
 
@@ -48,7 +74,9 @@ public partial class NetworkRouteDiagnosticService
 
             return new RouteDiagnosticReport
             {
-                TargetHost = targetHost,
+                TargetHost = request.TargetHost,
+                MaxHops = normalizedMaxHops,
+                GeoDetailsEnabled = request.IncludeGeoDetails,
                 ExecutionId = executionId,
                 GeneratedAtUtc = startedAt,
                 DurationMs = stopwatch.ElapsedMilliseconds,
@@ -59,29 +87,36 @@ public partial class NetworkRouteDiagnosticService
                     PacketLossPercent = 100
                 },
                 Hops = [],
-                Narrative = "This build currently targets Windows because it parses native tracert output.",
+                Narrative = "The current platform is not yet wired for traceroute command execution.",
                 StatusLabel = "Unsupported",
-                StatusSummary = "Route analysis is available, but detailed tracert parsing currently expects Windows.",
+                StatusSummary = "Route analysis is available, but traceroute integration is not configured for this platform.",
                 RuntimeSummary = BuildRuntimeSummary(),
-                DiagnosticMode = DiagnosticMode,
+                DiagnosticMode = "Unsupported platform",
+                TracerouteCommand = "n/a",
                 GeoDataProvider = GeoDataProvider,
                 SuspectedIssue = "Unsupported platform",
                 RawTracerouteLines = []
             };
         }
 
-        var pingSummary = await RunPingAsync(targetHost, pingCount);
-        var tracerouteLines = await RunCommandLinesAsync("tracert", ["-d", "-w", "900", targetHost], cancellationToken);
-        var hops = await ParseTracerouteAsync(targetHost, tracerouteLines, cancellationToken);
-        var suspectedIssue = FindSuspectedIssue(hops, pingSummary);
-        var statusLabel = DetermineStatusLabel(hops, pingSummary);
-        var statusSummary = BuildStatusSummary(statusLabel, hops, pingSummary, suspectedIssue);
+        var pingSummary = await RunPingAsync(request.TargetHost, normalizedPingCount, cancellationToken);
+        var tracerouteResult = await RunTracerouteCommandAsync(tracerouteSpec, cancellationToken);
+        var hops = await ParseTracerouteAsync(
+            request.TargetHost,
+            tracerouteResult.OutputFlavor,
+            tracerouteResult.Lines,
+            request.IncludeGeoDetails,
+            cancellationToken);
+
+        var suspectedIssue = FindSuspectedIssue(hops, pingSummary, tracerouteResult.StartErrorMessage);
+        var statusLabel = DetermineStatusLabel(hops, pingSummary, tracerouteResult.StartErrorMessage);
+        var statusSummary = BuildStatusSummary(statusLabel, hops, pingSummary, suspectedIssue, tracerouteResult.StartErrorMessage);
 
         stopwatch.Stop();
 
         _logger.LogInformation(
             "Completed route analysis for {TargetHost} in {DurationMs} ms with {HopCount} hops, {PacketLossPercent}% packet loss, status {StatusLabel}",
-            targetHost,
+            request.TargetHost,
             stopwatch.ElapsedMilliseconds,
             hops.Count,
             pingSummary.PacketLossPercent,
@@ -89,7 +124,9 @@ public partial class NetworkRouteDiagnosticService
 
         return new RouteDiagnosticReport
         {
-            TargetHost = targetHost,
+            TargetHost = request.TargetHost,
+            MaxHops = normalizedMaxHops,
+            GeoDetailsEnabled = request.IncludeGeoDetails,
             ExecutionId = executionId,
             GeneratedAtUtc = startedAt,
             DurationMs = stopwatch.ElapsedMilliseconds,
@@ -99,23 +136,26 @@ public partial class NetworkRouteDiagnosticService
             StatusLabel = statusLabel,
             StatusSummary = statusSummary,
             RuntimeSummary = BuildRuntimeSummary(),
-            DiagnosticMode = DiagnosticMode,
+            DiagnosticMode = tracerouteSpec.ModeLabel,
+            TracerouteCommand = tracerouteResult.CommandDisplay,
             GeoDataProvider = GeoDataProvider,
-            Narrative = BuildNarrative(pingSummary, hops, suspectedIssue),
-            RawTracerouteLines = tracerouteLines
+            Narrative = BuildNarrative(pingSummary, hops, suspectedIssue, tracerouteResult.StartErrorMessage),
+            RawTracerouteLines = tracerouteResult.Lines
         };
     }
 
-    private static async Task<PingSummary> RunPingAsync(string targetHost, int pingCount)
+    private async Task<PingSummary> RunPingAsync(string targetHost, int pingCount, CancellationToken cancellationToken)
     {
         using var ping = new Ping();
         var replies = new List<long>();
 
         for (var i = 0; i < pingCount; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
-                var reply = await ping.SendPingAsync(targetHost, 1200);
+                var reply = await ping.SendPingAsync(targetHost, _options.PingTimeoutMs);
                 if (reply.Status == IPStatus.Success)
                 {
                     replies.Add(reply.RoundtripTime);
@@ -145,16 +185,13 @@ public partial class NetworkRouteDiagnosticService
         };
     }
 
-    private static async Task<IReadOnlyList<string>> RunCommandLinesAsync(
-        string fileName,
-        IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
+    private async Task<TracerouteRunResult> RunTracerouteCommandAsync(TracerouteCommandSpec spec, CancellationToken cancellationToken)
     {
         using Process process = new()
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = fileName,
+                FileName = spec.FileName,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -162,50 +199,84 @@ public partial class NetworkRouteDiagnosticService
             }
         };
 
-        foreach (var argument in arguments)
+        foreach (var argument in spec.Arguments)
         {
             process.StartInfo.ArgumentList.Add(argument);
         }
 
-        process.Start();
+        var commandDisplay = BuildCommandDisplay(spec.FileName, spec.Arguments);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        try
+        {
+            process.Start();
+        }
+        catch (Exception ex)
+        {
+            var errorLines = new List<string>
+            {
+                $"Unable to start traceroute command: {commandDisplay}",
+                ex.Message
+            };
 
-        await process.WaitForExitAsync(cancellationToken);
+            return new TracerouteRunResult(commandDisplay, spec.ModeLabel, spec.OutputFlavor, errorLines, ex.Message);
+        }
 
-        var output = await outputTask;
-        var error = await errorTask;
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TracerouteProcessTimeoutSeconds));
 
-        return (output + Environment.NewLine + error)
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
+        try
+        {
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+            await process.WaitForExitAsync(timeoutCts.Token);
+
+            var output = await outputTask;
+            var error = await errorTask;
+
+            var lines = (output + Environment.NewLine + error)
+                .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+
+            if (lines.Count == 0)
+            {
+                lines.Add("Traceroute returned no output.");
+            }
+
+            return new TracerouteRunResult(commandDisplay, spec.ModeLabel, spec.OutputFlavor, lines, null);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            TryKillProcess(process);
+
+            var timeoutLines = new List<string>
+            {
+                $"Traceroute command timed out after {_options.TracerouteProcessTimeoutSeconds} seconds: {commandDisplay}"
+            };
+
+            return new TracerouteRunResult(commandDisplay, spec.ModeLabel, spec.OutputFlavor, timeoutLines, "Traceroute command timed out");
+        }
     }
 
-    private async Task<IReadOnlyList<RouteHop>> ParseTracerouteAsync(string targetHost, IReadOnlyList<string> lines, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<RouteHop>> ParseTracerouteAsync(
+        string targetHost,
+        TracerouteOutputFlavor outputFlavor,
+        IReadOnlyList<string> lines,
+        bool includeGeoDetails,
+        CancellationToken cancellationToken)
     {
         var hops = new List<RouteHop>();
         RouteHop? previous = null;
 
         foreach (var line in lines)
         {
-            var match = HopRegex().Match(line);
-            if (!match.Success)
+            if (!TryParseHopLine(line, outputFlavor, out var parsedHop))
             {
                 continue;
             }
 
-            var hopNumber = int.Parse(match.Groups["hop"].Value);
-            var samples = new[]
-            {
-                match.Groups["s1"].Value,
-                match.Groups["s2"].Value,
-                match.Groups["s3"].Value
-            };
-
-            var parsedSamples = samples.Select(ParseLatency).ToList();
-            var address = match.Groups["addr"].Value.Trim();
-            var isTimeout = parsedSamples.All(static value => !value.HasValue);
+            var parsedSamples = parsedHop.Samples.Select(ParseLatency).ToList();
+            var isTimeout = parsedHop.IsTimeout || parsedSamples.All(static value => !value.HasValue);
             var averageLatency = parsedSamples.Any(static value => value.HasValue)
                 ? (int?)Math.Round(parsedSamples.Where(static value => value.HasValue).Average(static value => value!.Value))
                 : null;
@@ -215,11 +286,15 @@ public partial class NetworkRouteDiagnosticService
                 : null;
 
             var suspectedSpike = latencyDelta is int delta && delta >= 25;
-            var reverseDns = await ResolveReverseDnsAsync(address, cancellationToken);
-            var geoDetails = !isTimeout && IPAddress.TryParse(address, out var parsedIp) && !IsPrivateAddress(parsedIp)
-                ? await _ipGeoLookupService.LookupAsync(address, cancellationToken)
+            var reverseDns = await ResolveReverseDnsAsync(parsedHop.Address, cancellationToken);
+            var geoDetails = includeGeoDetails
+                && !isTimeout
+                && IPAddress.TryParse(parsedHop.Address, out var parsedIp)
+                && !IsPrivateAddress(parsedIp)
+                ? await _ipGeoLookupService.LookupAsync(parsedHop.Address, cancellationToken)
                 : null;
-            var (scopeLabel, scopeDetail) = DescribeHop(targetHost, hopNumber, address, isTimeout, reverseDns);
+
+            var (scopeLabel, scopeDetail) = DescribeHop(targetHost, parsedHop.HopNumber, parsedHop.Address, isTimeout, reverseDns);
 
             var note = isTimeout
                 ? "This hop did not reply to ICMP. That alone does not prove a failure."
@@ -229,9 +304,9 @@ public partial class NetworkRouteDiagnosticService
 
             var hop = new RouteHop
             {
-                HopNumber = hopNumber,
-                DisplayAddress = string.IsNullOrWhiteSpace(address) ? "(unknown)" : address,
-                Samples = samples,
+                HopNumber = parsedHop.HopNumber,
+                DisplayAddress = string.IsNullOrWhiteSpace(parsedHop.Address) ? "(unknown)" : parsedHop.Address,
+                Samples = parsedHop.Samples,
                 AverageLatencyMs = averageLatency,
                 LatencyDeltaMs = latencyDelta,
                 IsTimeout = isTimeout,
@@ -248,6 +323,118 @@ public partial class NetworkRouteDiagnosticService
         }
 
         return hops;
+    }
+
+    private static bool TryParseHopLine(string line, TracerouteOutputFlavor outputFlavor, out ParsedHop parsedHop)
+    {
+        return outputFlavor switch
+        {
+            TracerouteOutputFlavor.Windows => TryParseWindowsHop(line, out parsedHop),
+            _ => TryParseUnixHop(line, out parsedHop)
+        };
+    }
+
+    private static bool TryParseWindowsHop(string line, out ParsedHop parsedHop)
+    {
+        parsedHop = default!;
+        var match = WindowsHopRegex().Match(line);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var hopNumber = int.Parse(match.Groups["hop"].Value, CultureInfo.InvariantCulture);
+        var samples = new[]
+        {
+            match.Groups["s1"].Value,
+            match.Groups["s2"].Value,
+            match.Groups["s3"].Value
+        };
+
+        var tail = match.Groups["tail"].Value.Trim();
+        var isTimeout = samples.All(static sample => sample == "*");
+
+        var address = ExtractAddress(tail);
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            address = isTimeout ? "*" : "(unknown)";
+        }
+
+        parsedHop = new ParsedHop(hopNumber, address, samples, isTimeout);
+        return true;
+    }
+
+    private static bool TryParseUnixHop(string line, out ParsedHop parsedHop)
+    {
+        parsedHop = default!;
+        var match = UnixHopRegex().Match(line);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var hopNumber = int.Parse(match.Groups["hop"].Value, CultureInfo.InvariantCulture);
+        var tail = match.Groups["tail"].Value.Trim();
+
+        if (string.IsNullOrWhiteSpace(tail))
+        {
+            return false;
+        }
+
+        var tailParts = tail.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tailParts.Length == 0)
+        {
+            return false;
+        }
+
+        var address = tailParts[0];
+        var sampleTokens = new List<string>();
+
+        if (address == "*")
+        {
+            sampleTokens.Add("*");
+        }
+
+        foreach (Match latencyMatch in LatencySampleRegex().Matches(tail))
+        {
+            sampleTokens.Add(latencyMatch.Value.Trim());
+            if (sampleTokens.Count == 3)
+            {
+                break;
+            }
+        }
+
+        while (sampleTokens.Count < 3)
+        {
+            sampleTokens.Add("*");
+        }
+
+        var samples = sampleTokens.Take(3).ToArray();
+        var isTimeout = samples.All(static sample => sample == "*");
+
+        if (address != "*" && !IPAddress.TryParse(address, out _))
+        {
+            address = ExtractAddress(tail) ?? address;
+        }
+
+        parsedHop = new ParsedHop(hopNumber, address, samples, isTimeout);
+        return true;
+    }
+
+    private static string? ExtractAddress(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return null;
+        }
+
+        var ipMatch = IpAddressRegex().Match(line);
+        if (ipMatch.Success)
+        {
+            return ipMatch.Value;
+        }
+
+        return null;
     }
 
     private static async Task<string?> ResolveReverseDnsAsync(string address, CancellationToken cancellationToken)
@@ -299,9 +486,16 @@ public partial class NetworkRouteDiagnosticService
 
     private static bool IsPrivateAddress(IPAddress ipAddress)
     {
-        var bytes = ipAddress.GetAddressBytes();
-        return bytes.Length == 4
-               && (bytes[0], bytes[1]) switch
+        if (ipAddress.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            var ipv6Bytes = ipAddress.GetAddressBytes();
+            var isUniqueLocal = (ipv6Bytes[0] & 0xFE) == 0xFC;
+            return ipAddress.IsIPv6LinkLocal || isUniqueLocal;
+        }
+
+        var ipv4Bytes = ipAddress.GetAddressBytes();
+        return ipv4Bytes.Length == 4
+               && (ipv4Bytes[0], ipv4Bytes[1]) switch
                {
                    (10, _) => true,
                    (172, >= 16 and <= 31) => true,
@@ -311,8 +505,13 @@ public partial class NetworkRouteDiagnosticService
                };
     }
 
-    private static string? FindSuspectedIssue(IReadOnlyList<RouteHop> hops, PingSummary pingSummary)
+    private static string? FindSuspectedIssue(IReadOnlyList<RouteHop> hops, PingSummary pingSummary, string? tracerouteError)
     {
+        if (!string.IsNullOrWhiteSpace(tracerouteError))
+        {
+            return tracerouteError;
+        }
+
         if (hops.Count == 0)
         {
             return "Traceroute returned no parsable hops";
@@ -337,11 +536,16 @@ public partial class NetworkRouteDiagnosticService
         return null;
     }
 
-    private static string BuildNarrative(PingSummary pingSummary, IReadOnlyList<RouteHop> hops, string? suspectedIssue)
+    private static string BuildNarrative(PingSummary pingSummary, IReadOnlyList<RouteHop> hops, string? suspectedIssue, string? tracerouteError)
     {
+        if (!string.IsNullOrWhiteSpace(tracerouteError))
+        {
+            return $"Ping completed, but traceroute command execution failed: {tracerouteError}. Ensure traceroute tooling is available on this host and retry.";
+        }
+
         if (hops.Count == 0)
         {
-            return "This run did not produce any parsable hops. The target may be filtering responses, or the tracert output format differed from what the parser expects.";
+            return "This run did not produce any parsable hops. The target may be filtering responses, or the traceroute output format differed from what the parser expects.";
         }
 
         if (!string.IsNullOrWhiteSpace(suspectedIssue))
@@ -352,8 +556,13 @@ public partial class NetworkRouteDiagnosticService
         return $"Average ping is {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms and the path does not show a clear latency step-up. If the workload still feels unstable, the issue may be bursty traffic behavior or target-side saturation.";
     }
 
-    private static string DetermineStatusLabel(IReadOnlyList<RouteHop> hops, PingSummary pingSummary)
+    private static string DetermineStatusLabel(IReadOnlyList<RouteHop> hops, PingSummary pingSummary, string? tracerouteError)
     {
+        if (!string.IsNullOrWhiteSpace(tracerouteError))
+        {
+            return "Investigate";
+        }
+
         var spikeCount = hops.Count(static hop => hop.SuspectedSpike);
         var timeoutCount = hops.Count(static hop => hop.IsTimeout);
 
@@ -384,8 +593,14 @@ public partial class NetworkRouteDiagnosticService
         string statusLabel,
         IReadOnlyList<RouteHop> hops,
         PingSummary pingSummary,
-        string? suspectedIssue)
+        string? suspectedIssue,
+        string? tracerouteError)
     {
+        if (!string.IsNullOrWhiteSpace(tracerouteError))
+        {
+            return $"Traceroute command failed: {tracerouteError}";
+        }
+
         return statusLabel switch
         {
             "Critical" => "Packet loss is high enough to suggest an end-to-end connectivity problem.",
@@ -404,10 +619,105 @@ public partial class NetworkRouteDiagnosticService
 
     private static int? ParseLatency(string value)
     {
-        var digits = Regex.Match(value, @"\d+").Value;
-        return int.TryParse(digits, out var result) ? result : null;
+        if (value == "*")
+        {
+            return null;
+        }
+
+        var digits = NumericRegex().Match(value).Value;
+        if (string.IsNullOrWhiteSpace(digits))
+        {
+            return null;
+        }
+
+        return double.TryParse(digits, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? (int?)Math.Round(parsed)
+            : null;
     }
 
-    [GeneratedRegex(@"^\s*(?<hop>\d+)\s+(?<s1><\d+\s*ms|\d+\s*ms|\*)\s+(?<s2><\d+\s*ms|\d+\s*ms|\*)\s+(?<s3><\d+\s*ms|\d+\s*ms|\*)\s+(?<addr>\S+)\s*$", RegexOptions.IgnoreCase)]
-    private static partial Regex HopRegex();
+    private TracerouteCommandSpec? BuildTracerouteCommandSpec(string targetHost, int maxHops)
+    {
+        var waitMs = _options.TracerouteProbeTimeoutMs.ToString(CultureInfo.InvariantCulture);
+        var hopValue = maxHops.ToString(CultureInfo.InvariantCulture);
+
+        if (OperatingSystem.IsWindows())
+        {
+            return new TracerouteCommandSpec(
+                "tracert",
+                ["-d", "-w", waitMs, "-h", hopValue, targetHost],
+                "ICMP ping + Windows tracert",
+                TracerouteOutputFlavor.Windows);
+        }
+
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            var waitSeconds = Math.Clamp((int)Math.Round(_options.TracerouteProbeTimeoutMs / 1000.0), 1, 5)
+                .ToString(CultureInfo.InvariantCulture);
+
+            return new TracerouteCommandSpec(
+                "traceroute",
+                ["-n", "-w", waitSeconds, "-m", hopValue, targetHost],
+                "ICMP ping + traceroute (-n)",
+                TracerouteOutputFlavor.Unix);
+        }
+
+        return null;
+    }
+
+    private static string BuildCommandDisplay(string fileName, IReadOnlyList<string> arguments)
+    {
+        return $"{fileName} {string.Join(' ', arguments)}";
+    }
+
+    private static void TryKillProcess(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+            // Ignore best-effort cleanup failures.
+        }
+    }
+
+    [GeneratedRegex(@"^\s*(?<hop>\d+)\s+(?<s1><\d+\s*ms|\d+\s*ms|\*)\s+(?<s2><\d+\s*ms|\d+\s*ms|\*)\s+(?<s3><\d+\s*ms|\d+\s*ms|\*)(?:\s+(?<tail>.+))?\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex WindowsHopRegex();
+
+    [GeneratedRegex(@"^\s*(?<hop>\d+)\s+(?<tail>.+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex UnixHopRegex();
+
+    [GeneratedRegex(@"((?:<)?\d+(?:\.\d+)?)\s*ms|\*", RegexOptions.IgnoreCase)]
+    private static partial Regex LatencySampleRegex();
+
+    [GeneratedRegex(@"\d+(?:\.\d+)?")]
+    private static partial Regex NumericRegex();
+
+    [GeneratedRegex(@"((?:\d{1,3}(?:\.\d{1,3}){3})|(?:[0-9a-fA-F:]{2,}))")]
+    private static partial Regex IpAddressRegex();
+
+    private sealed record ParsedHop(int HopNumber, string Address, IReadOnlyList<string> Samples, bool IsTimeout);
+
+    private sealed record TracerouteCommandSpec(
+        string FileName,
+        IReadOnlyList<string> Arguments,
+        string ModeLabel,
+        TracerouteOutputFlavor OutputFlavor);
+
+    private sealed record TracerouteRunResult(
+        string CommandDisplay,
+        string ModeLabel,
+        TracerouteOutputFlavor OutputFlavor,
+        IReadOnlyList<string> Lines,
+        string? StartErrorMessage);
+
+    private enum TracerouteOutputFlavor
+    {
+        Windows,
+        Unix
+    }
 }
+
