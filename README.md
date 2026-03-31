@@ -77,6 +77,7 @@ dotnet run --project RouteAnalyzer.Cli -- --profile-file .\routeanalyzer.profile
 ## Output Bundle
 
 By default, the CLI writes a bundle under `.\reports\<timestamp-target>\`.
+After the bundle is written, the CLI will also try to open `report.html` automatically for quick review.
 
 Bundle contents:
 
@@ -110,6 +111,7 @@ The HTML report contains:
 - `--create-sample-profile [path]`
 - `--force`
 - `--no-geo`
+- `--no-open`
 - `--help`
 
 ## Publish EXE

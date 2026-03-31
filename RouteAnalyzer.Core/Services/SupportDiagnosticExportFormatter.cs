@@ -8,6 +8,9 @@ namespace RouteAnalyzer.Services;
 
 public static class SupportDiagnosticExportFormatter
 {
+    private const int MaxSummaryEvidenceItems = 4;
+    private const int MaxSummaryRecommendationItems = 3;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -25,6 +28,8 @@ public static class SupportDiagnosticExportFormatter
         var language = ReportLanguage.Normalize(report.Profile.PreferredLanguage);
         var assessment = SupportReportLocalizer.GetAssessmentView(report, language);
         var route = SupportReportLocalizer.GetRouteView(report.PrimaryRoute, language);
+        var summaryEvidence = TakeSummaryItems(assessment.EvidenceHighlights, MaxSummaryEvidenceItems);
+        var summaryRecommendations = TakeSummaryItems(assessment.Recommendations, MaxSummaryRecommendationItems);
         var builder = new StringBuilder();
         builder.AppendLine(SupportReportLocalizer.Text("ReportTitle", language));
         builder.AppendLine("============================");
@@ -49,7 +54,7 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine();
         builder.AppendLine(SupportReportLocalizer.Text("Evidence", language));
         builder.AppendLine("--------");
-        foreach (var line in assessment.EvidenceHighlights)
+        foreach (var line in summaryEvidence)
         {
             builder.AppendLine($"- {line}");
         }
@@ -57,39 +62,9 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine();
         builder.AppendLine(SupportReportLocalizer.Text("NextSteps", language));
         builder.AppendLine("---------------");
-        foreach (var line in assessment.Recommendations)
+        foreach (var line in summaryRecommendations)
         {
             builder.AppendLine($"- {line}");
-        }
-
-        if (report.DnsResults.Count > 0)
-        {
-            builder.AppendLine();
-            builder.AppendLine(SupportReportLocalizer.Text("DnsChecks", language));
-            builder.AppendLine("----------");
-            foreach (var result in report.DnsResults)
-            {
-                var status = result.Success ? SupportReportLocalizer.Text("Pass", language) : SupportReportLocalizer.Text("Fail", language);
-                var detail = result.Success
-                    ? string.Join(", ", result.Addresses)
-                    : result.ErrorMessage ?? "Lookup failed.";
-                builder.AppendLine($"- [{status}] {result.Name} -> {result.Hostname} ({result.DurationMs} ms) :: {detail}");
-            }
-        }
-
-        if (report.TcpResults.Count > 0)
-        {
-            builder.AppendLine();
-            builder.AppendLine(SupportReportLocalizer.Text("TcpChecks", language));
-            builder.AppendLine("----------");
-            foreach (var result in report.TcpResults)
-            {
-                var status = result.Success ? SupportReportLocalizer.Text("Pass", language) : SupportReportLocalizer.Text("Fail", language);
-                var detail = result.Success
-                    ? (ReportLanguage.IsTraditionalChinese(language) ? "\u9023\u7DDA\u5DF2\u5EFA\u7ACB\u3002" : "Connection established.")
-                    : result.ErrorMessage ?? (ReportLanguage.IsTraditionalChinese(language) ? "\u9023\u7DDA\u5931\u6557\u3002" : "Connection failed.");
-                builder.AppendLine($"- [{status}] {result.Name} -> {result.Host}:{result.Port} ({result.DurationMs} ms) :: {detail}");
-            }
         }
 
         builder.AppendLine();
@@ -101,15 +76,17 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine($"{SupportReportLocalizer.Text("AverageLatency", language),-12} : {report.PrimaryRoute.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms");
         builder.AppendLine($"{SupportReportLocalizer.Text("Loss", language),-12} : {report.PrimaryRoute.PingSummary.PacketLossPercent}%");
         builder.AppendLine($"{SupportReportLocalizer.Text("Jitter", language),-12} : {report.PrimaryRoute.PingSummary.JitterMs?.ToString() ?? "-"} ms");
-        builder.AppendLine();
-        builder.AppendLine(SupportReportLocalizer.Text("Hops", language));
-        builder.AppendLine("----");
 
-        foreach (var hop in report.PrimaryRoute.Hops)
+        if (report.DnsResults.Count > 0 || report.TcpResults.Count > 0)
         {
-            builder.AppendLine(
-                $"#{hop.HopNumber,2} {hop.DisplayAddress,-40} {(hop.AverageLatencyMs?.ToString() ?? "*"),5} ms  {(SupportReportLocalizer.GetHopScopeLabel(hop, language)),-18}  {SupportReportLocalizer.GetHopNote(hop, language)}");
+            builder.AppendLine();
+            builder.AppendLine(SupportReportLocalizer.Text("ChecksOverview", language));
+            builder.AppendLine("----------------");
+            builder.AppendLine(BuildChecksOverviewLine(report, language));
         }
+
+        builder.AppendLine();
+        builder.AppendLine(SupportReportLocalizer.Text("DetailHint", language));
 
         return builder.ToString();
     }
@@ -123,6 +100,10 @@ public static class SupportDiagnosticExportFormatter
         var assessmentZh = SupportReportLocalizer.GetAssessmentView(report, ReportLanguage.TraditionalChinese);
         var routeEn = SupportReportLocalizer.GetRouteView(report.PrimaryRoute, ReportLanguage.English);
         var routeZh = SupportReportLocalizer.GetRouteView(report.PrimaryRoute, ReportLanguage.TraditionalChinese);
+        var summaryRecommendationsEn = TakeSummaryItems(assessmentEn.Recommendations, MaxSummaryRecommendationItems);
+        var summaryRecommendationsZh = TakeSummaryItems(assessmentZh.Recommendations, MaxSummaryRecommendationItems);
+        var summaryEvidenceEn = TakeSummaryItems(assessmentEn.EvidenceHighlights, MaxSummaryEvidenceItems);
+        var summaryEvidenceZh = TakeSummaryItems(assessmentZh.EvidenceHighlights, MaxSummaryEvidenceItems);
         var statusClass = GetStatusClass(report.Assessment.OverallStatusLabel);
         var dnsPassed = report.DnsResults.Count(static result => result.Success);
         var tcpPassed = report.TcpResults.Count(static result => result.Success);
@@ -150,6 +131,13 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine("    .summary-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-top: 18px; }");
         builder.AppendLine("    .two-col { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 24px; }");
         builder.AppendLine("    .panel { background: var(--panel); border: 1px solid rgba(215,207,191,.85); border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(64,52,36,.08); margin-top: 20px; }");
+        builder.AppendLine("    details.panel { padding: 0; overflow: hidden; }");
+        builder.AppendLine("    details.panel summary { list-style: none; cursor: pointer; padding: 18px 20px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 16px; }");
+        builder.AppendLine("    details.panel summary::-webkit-details-marker { display: none; }");
+        builder.AppendLine("    details.panel summary::after { content: '+'; color: var(--accent); font-size: 24px; line-height: 1; }");
+        builder.AppendLine("    details.panel[open] summary::after { content: '−'; }");
+        builder.AppendLine("    .detail-body { padding: 0 20px 20px; }");
+        builder.AppendLine("    .summary-note { color: var(--muted); font-weight: 500; font-size: 14px; }");
         builder.AppendLine("    .status-pill { display: inline-block; padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 14px; }");
         builder.AppendLine("    .status-healthy { background: rgba(43,122,75,.14); color: var(--healthy); }");
         builder.AppendLine("    .status-warning { background: rgba(183,121,31,.14); color: var(--warning); }");
@@ -237,10 +225,10 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine($"        <h2>{Bilingual(SupportReportLocalizer.Text("UserSummary", ReportLanguage.English), SupportReportLocalizer.Text("UserSummary", ReportLanguage.TraditionalChinese))}</h2>");
         builder.AppendLine($"        <p style=\"margin-top:12px;\">{Bilingual(assessmentEn.UserSummary, assessmentZh.UserSummary)}</p>");
         builder.AppendLine("        <ul>");
-        for (var index = 0; index < Math.Max(assessmentEn.Recommendations.Count, assessmentZh.Recommendations.Count); index++)
+        for (var index = 0; index < Math.Max(summaryRecommendationsEn.Count, summaryRecommendationsZh.Count); index++)
         {
-            var englishRecommendation = index < assessmentEn.Recommendations.Count ? assessmentEn.Recommendations[index] : string.Empty;
-            var chineseRecommendation = index < assessmentZh.Recommendations.Count ? assessmentZh.Recommendations[index] : string.Empty;
+            var englishRecommendation = index < summaryRecommendationsEn.Count ? summaryRecommendationsEn[index] : string.Empty;
+            var chineseRecommendation = index < summaryRecommendationsZh.Count ? summaryRecommendationsZh[index] : string.Empty;
             builder.AppendLine($"          <li>{Bilingual(englishRecommendation, chineseRecommendation)}</li>");
         }
         builder.AppendLine("        </ul>");
@@ -249,17 +237,18 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine($"        <h2>{Bilingual(SupportReportLocalizer.Text("ItSummary", ReportLanguage.English), SupportReportLocalizer.Text("ItSummary", ReportLanguage.TraditionalChinese))}</h2>");
         builder.AppendLine($"        <p style=\"margin-top:12px;\">{Bilingual(assessmentEn.ItSummary, assessmentZh.ItSummary)}</p>");
         builder.AppendLine("        <ul>");
-        for (var index = 0; index < Math.Max(assessmentEn.EvidenceHighlights.Count, assessmentZh.EvidenceHighlights.Count); index++)
+        for (var index = 0; index < Math.Max(summaryEvidenceEn.Count, summaryEvidenceZh.Count); index++)
         {
-            var englishEvidence = index < assessmentEn.EvidenceHighlights.Count ? assessmentEn.EvidenceHighlights[index] : string.Empty;
-            var chineseEvidence = index < assessmentZh.EvidenceHighlights.Count ? assessmentZh.EvidenceHighlights[index] : string.Empty;
+            var englishEvidence = index < summaryEvidenceEn.Count ? summaryEvidenceEn[index] : string.Empty;
+            var chineseEvidence = index < summaryEvidenceZh.Count ? summaryEvidenceZh[index] : string.Empty;
             builder.AppendLine($"          <li>{Bilingual(englishEvidence, chineseEvidence)}</li>");
         }
         builder.AppendLine("        </ul>");
         builder.AppendLine("      </article>");
         builder.AppendLine("    </section>");
-        builder.AppendLine("    <section class=\"panel\">");
-        builder.AppendLine($"      <h2>{Bilingual(SupportReportLocalizer.Text("DnsChecks", ReportLanguage.English), SupportReportLocalizer.Text("DnsChecks", ReportLanguage.TraditionalChinese))}</h2>");
+        builder.AppendLine("    <details class=\"panel\">");
+        builder.AppendLine($"      <summary><span>{Bilingual(SupportReportLocalizer.Text("DnsChecks", ReportLanguage.English), SupportReportLocalizer.Text("DnsChecks", ReportLanguage.TraditionalChinese))}</span><span class=\"summary-note\">{Encode(BuildDnsSummary(report))}</span></summary>");
+        builder.AppendLine("      <div class=\"detail-body\">");
         builder.AppendLine($"      <table><thead><tr><th>{Bilingual(SupportReportLocalizer.Text("Name", ReportLanguage.English), SupportReportLocalizer.Text("Name", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Hostname", ReportLanguage.English), SupportReportLocalizer.Text("Hostname", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Status", ReportLanguage.English), SupportReportLocalizer.Text("Status", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Duration", ReportLanguage.English), SupportReportLocalizer.Text("Duration", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Detail", ReportLanguage.English), SupportReportLocalizer.Text("Detail", ReportLanguage.TraditionalChinese))}</th></tr></thead><tbody>");
         if (report.DnsResults.Count == 0)
         {
@@ -276,9 +265,11 @@ public static class SupportDiagnosticExportFormatter
             }
         }
         builder.AppendLine("      </tbody></table>");
-        builder.AppendLine("    </section>");
-        builder.AppendLine("    <section class=\"panel\">");
-        builder.AppendLine($"      <h2>{Bilingual(SupportReportLocalizer.Text("TcpChecks", ReportLanguage.English), SupportReportLocalizer.Text("TcpChecks", ReportLanguage.TraditionalChinese))}</h2>");
+        builder.AppendLine("      </div>");
+        builder.AppendLine("    </details>");
+        builder.AppendLine("    <details class=\"panel\">");
+        builder.AppendLine($"      <summary><span>{Bilingual(SupportReportLocalizer.Text("TcpChecks", ReportLanguage.English), SupportReportLocalizer.Text("TcpChecks", ReportLanguage.TraditionalChinese))}</span><span class=\"summary-note\">{Encode(BuildTcpSummary(report))}</span></summary>");
+        builder.AppendLine("      <div class=\"detail-body\">");
         builder.AppendLine($"      <table><thead><tr><th>{Bilingual(SupportReportLocalizer.Text("Name", ReportLanguage.English), SupportReportLocalizer.Text("Name", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Endpoint", ReportLanguage.English), SupportReportLocalizer.Text("Endpoint", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Status", ReportLanguage.English), SupportReportLocalizer.Text("Status", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Duration", ReportLanguage.English), SupportReportLocalizer.Text("Duration", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Detail", ReportLanguage.English), SupportReportLocalizer.Text("Detail", ReportLanguage.TraditionalChinese))}</th></tr></thead><tbody>");
         if (report.TcpResults.Count == 0)
         {
@@ -297,10 +288,11 @@ public static class SupportDiagnosticExportFormatter
             }
         }
         builder.AppendLine("      </tbody></table>");
-        builder.AppendLine("    </section>");
-        builder.AppendLine("    <section class=\"panel\">");
-        builder.AppendLine($"      <h2>{Bilingual(SupportReportLocalizer.Text("RouteDetail", ReportLanguage.English), SupportReportLocalizer.Text("RouteDetail", ReportLanguage.TraditionalChinese))}</h2>");
-        builder.AppendLine($"      <p class=\"muted\" style=\"margin-top:8px;\">{Bilingual(routeEn.StatusSummary, routeZh.StatusSummary)}</p>");
+        builder.AppendLine("      </div>");
+        builder.AppendLine("    </details>");
+        builder.AppendLine($"    <details class=\"panel\"{(IsRouteDetailWorthOpening(report) ? " open" : string.Empty)}>");
+        builder.AppendLine($"      <summary><span>{Bilingual(SupportReportLocalizer.Text("RouteDetail", ReportLanguage.English), SupportReportLocalizer.Text("RouteDetail", ReportLanguage.TraditionalChinese))}</span><span class=\"summary-note\">{Bilingual(routeEn.StatusSummary, routeZh.StatusSummary)}</span></summary>");
+        builder.AppendLine("      <div class=\"detail-body\">");
         builder.AppendLine($"      <table><thead><tr><th>{Bilingual(SupportReportLocalizer.Text("Hop", ReportLanguage.English), SupportReportLocalizer.Text("Hop", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Address", ReportLanguage.English), SupportReportLocalizer.Text("Address", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Avg", ReportLanguage.English), SupportReportLocalizer.Text("Avg", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Delta", ReportLanguage.English), SupportReportLocalizer.Text("Delta", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Scope", ReportLanguage.English), SupportReportLocalizer.Text("Scope", ReportLanguage.TraditionalChinese))}</th><th>{Bilingual(SupportReportLocalizer.Text("Note", ReportLanguage.English), SupportReportLocalizer.Text("Note", ReportLanguage.TraditionalChinese))}</th></tr></thead><tbody>");
         if (report.PrimaryRoute.Hops.Count == 0)
         {
@@ -314,11 +306,14 @@ public static class SupportDiagnosticExportFormatter
             }
         }
         builder.AppendLine("      </tbody></table>");
-        builder.AppendLine("    </section>");
-        builder.AppendLine("    <section class=\"panel\">");
-        builder.AppendLine($"      <h2>{Bilingual(SupportReportLocalizer.Text("RawTracerouteOutput", ReportLanguage.English), SupportReportLocalizer.Text("RawTracerouteOutput", ReportLanguage.TraditionalChinese))}</h2>");
+        builder.AppendLine("      </div>");
+        builder.AppendLine("    </details>");
+        builder.AppendLine("    <details class=\"panel\">");
+        builder.AppendLine($"      <summary><span>{Bilingual(SupportReportLocalizer.Text("RawTracerouteOutput", ReportLanguage.English), SupportReportLocalizer.Text("RawTracerouteOutput", ReportLanguage.TraditionalChinese))}</span><span class=\"summary-note\">{Bilingual("Expand only if you need the raw command output.", "只有需要看原始輸出時再展開。")}</span></summary>");
+        builder.AppendLine("      <div class=\"detail-body\">");
         builder.AppendLine($"      <pre>{Encode(string.Join(Environment.NewLine, report.PrimaryRoute.RawTracerouteLines))}</pre>");
-        builder.AppendLine("    </section>");
+        builder.AppendLine("      </div>");
+        builder.AppendLine("    </details>");
         builder.AppendLine("  </div>");
         builder.AppendLine("  <script>");
         builder.AppendLine("    (() => {");
@@ -373,6 +368,53 @@ public static class SupportDiagnosticExportFormatter
     private static string MetricCard(string englishLabel, string chineseLabel, string value)
     {
         return $"<div class=\"card\"><span class=\"label\">{Bilingual(englishLabel, chineseLabel)}</span><strong class=\"big\">{Encode(value)}</strong></div>";
+    }
+
+    private static IReadOnlyList<string> TakeSummaryItems(IReadOnlyList<string> items, int maxCount)
+    {
+        return items
+            .Where(static item => !string.IsNullOrWhiteSpace(item))
+            .Take(maxCount)
+            .ToArray();
+    }
+
+    private static string BuildChecksOverviewLine(SupportDiagnosticReport report, string language)
+    {
+        var dnsSummary = BuildDnsSummary(report);
+        var tcpSummary = BuildTcpSummary(report);
+
+        return ReportLanguage.IsTraditionalChinese(language)
+            ? $"DNS：{dnsSummary} | TCP：{tcpSummary}"
+            : $"DNS: {dnsSummary} | TCP: {tcpSummary}";
+    }
+
+    private static string BuildDnsSummary(SupportDiagnosticReport report)
+    {
+        if (report.DnsResults.Count == 0)
+        {
+            return "n/a";
+        }
+
+        var passed = report.DnsResults.Count(static result => result.Success);
+        return $"{passed}/{report.DnsResults.Count} pass";
+    }
+
+    private static string BuildTcpSummary(SupportDiagnosticReport report)
+    {
+        if (report.TcpResults.Count == 0)
+        {
+            return "n/a";
+        }
+
+        var passed = report.TcpResults.Count(static result => result.Success);
+        return $"{passed}/{report.TcpResults.Count} pass";
+    }
+
+    private static bool IsRouteDetailWorthOpening(SupportDiagnosticReport report)
+    {
+        return !string.Equals(report.Assessment.OverallStatusLabel, "Healthy", StringComparison.OrdinalIgnoreCase)
+            || report.PrimaryRoute.PingSummary.PacketLossPercent > 0
+            || report.PrimaryRoute.Hops.Any(static hop => hop.SuspectedSpike || hop.IsTimeout);
     }
 
     private static string Bilingual(string english, string chinese)

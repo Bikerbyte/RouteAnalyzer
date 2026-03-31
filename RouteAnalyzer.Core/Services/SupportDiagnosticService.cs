@@ -33,13 +33,8 @@ public sealed class SupportDiagnosticService
 
         _logger.LogInformation("Starting support diagnostic for profile {ProfileName} targeting {TargetHost}", profile.ProfileName, profile.TargetHost);
 
-        var routeTask = _routeDiagnosticService.AnalyzeAsync(new RouteAnalysisRequest
-        {
-            TargetHost = profile.TargetHost,
-            PingCount = profile.PingCount,
-            MaxHops = profile.MaxHops,
-            IncludeGeoDetails = profile.IncludeGeoDetails
-        }, cancellationToken);
+        // 主路徑、DNS、TCP 併行執行，讓整體報告時間控制在 helpdesk 可接受範圍。
+        var routeTask = _routeDiagnosticService.AnalyzeAsync(BuildRouteRequest(profile), cancellationToken);
 
         var dnsTask = RunDnsLookupsAsync(profile.DnsLookups, cancellationToken);
         var tcpTask = RunTcpChecksAsync(profile.TcpEndpoints, cancellationToken);
@@ -71,6 +66,17 @@ public sealed class SupportDiagnosticService
             PrimaryRoute = routeReport,
             DnsResults = dnsResults,
             TcpResults = tcpResults
+        };
+    }
+
+    private static RouteAnalysisRequest BuildRouteRequest(DiagnosticProfile profile)
+    {
+        return new RouteAnalysisRequest
+        {
+            TargetHost = profile.TargetHost,
+            PingCount = profile.PingCount,
+            MaxHops = profile.MaxHops,
+            IncludeGeoDetails = profile.IncludeGeoDetails
         };
     }
 
@@ -131,6 +137,7 @@ public sealed class SupportDiagnosticService
         }
         catch (Exception ex)
         {
+            _logger.LogWarning(ex, "DNS lookup failed for {LookupName} ({Hostname})", definition.Name, definition.Hostname);
             stopwatch.Stop();
 
             return new DnsLookupResult
@@ -207,6 +214,7 @@ public sealed class SupportDiagnosticService
         }
         catch (Exception ex) when (ex is SocketException or InvalidOperationException)
         {
+            _logger.LogWarning(ex, "TCP check failed for {EndpointName} ({Host}:{Port})", definition.Name, definition.Host, definition.Port);
             stopwatch.Stop();
 
             return new TcpEndpointResult

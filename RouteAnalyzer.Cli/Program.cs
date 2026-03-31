@@ -1,4 +1,5 @@
 using System.Text;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using RouteAnalyzer.Models;
@@ -13,6 +14,7 @@ internal static class CliApplication
 {
     public static async Task<int> RunAsync(string[] args)
     {
+        // 先做參數解析，讓後面的主流程保持乾淨。
         var parseResult = CliArguments.Parse(args);
         if (!parseResult.IsValid)
         {
@@ -28,6 +30,7 @@ internal static class CliApplication
 
         try
         {
+            // Func: 產生可編輯的 sample profile，方便 helpdesk 先落地使用。
             if (parseResult.CreateSampleProfile)
             {
                 var samplePath = parseResult.SampleProfilePath
@@ -38,6 +41,7 @@ internal static class CliApplication
                 return 0;
             }
 
+            // Main diagnostic flow
             var options = new RouteAnalyzerOptions();
             var profileResolution = ResolveExecutionProfile(parseResult, options);
 
@@ -85,11 +89,13 @@ internal static class CliApplication
         var summary = BuildConsoleSummary(report);
         Console.WriteLine(summary);
 
+        // console-only 給快速看結果用，不額外寫檔。
         if (arguments.ConsoleOnly)
         {
             return;
         }
 
+        // bundle 模式是 helpdesk 最常用的輸出，會把摘要和原始資料一起留存。
         if (!string.IsNullOrWhiteSpace(arguments.ReportDirectory) || string.Equals(arguments.Format, "bundle", StringComparison.OrdinalIgnoreCase))
         {
             var reportDirectory = arguments.ReportDirectory
@@ -99,10 +105,16 @@ internal static class CliApplication
             var bundle = SupportDiagnosticExportFormatter.WriteBundle(report, reportDirectory);
             Console.WriteLine();
             Console.WriteLine($"Report bundle saved to: {bundle.DirectoryPath}");
-            Console.WriteLine($"  summary : {bundle.SummaryPath}");
-            Console.WriteLine($"  json    : {bundle.JsonPath}");
-            Console.WriteLine($"  html    : {bundle.HtmlPath}");
-            Console.WriteLine($"  route   : {bundle.RouteCsvPath}");
+            Console.WriteLine($"Main report : {bundle.HtmlPath}");
+            Console.WriteLine($"Summary     : {bundle.SummaryPath}");
+            Console.WriteLine($"JSON        : {bundle.JsonPath}");
+            Console.WriteLine($"Route CSV   : {bundle.RouteCsvPath}");
+
+            if (!arguments.SuppressAutoOpen)
+            {
+                TryOpenPath(bundle.HtmlPath, "HTML report");
+            }
+
             return;
         }
 
@@ -119,6 +131,12 @@ internal static class CliApplication
             await File.WriteAllTextAsync(fullPath, output, Encoding.UTF8);
             Console.WriteLine();
             Console.WriteLine($"Report saved to: {fullPath}");
+
+            if (!arguments.SuppressAutoOpen && string.Equals(arguments.Format, "html", StringComparison.OrdinalIgnoreCase))
+            {
+                TryOpenPath(fullPath, "HTML report");
+            }
+
             return;
         }
 
@@ -184,6 +202,7 @@ internal static class CliApplication
 
         if (resolvedProfilePath is not null)
         {
+            // 有 profile 時，優先沿用 helpdesk 預先定義好的檢查內容。
             profile = DiagnosticProfileLoader.Load(resolvedProfilePath);
         }
         else
@@ -199,16 +218,8 @@ internal static class CliApplication
                 throw new DiagnosticProfileException("Target must be a valid hostname, IP address, or URL.");
             }
 
-            profile = new DiagnosticProfile
-            {
-                ProfileName = "Quick Diagnostic",
-                Description = "Ad hoc route diagnostic without a saved helpdesk profile.",
-                PreferredLanguage = arguments.Language ?? ReportLanguage.English,
-                TargetHost = normalizedTarget,
-                PingCount = arguments.PingCount ?? options.DefaultPingCount,
-                MaxHops = arguments.MaxHops ?? options.DefaultMaxHops,
-                IncludeGeoDetails = arguments.IncludeGeoDetails ?? options.DefaultIncludeGeoDetails
-            };
+            // 沒有 profile 時，退回 ad hoc 模式，讓使用者可以直接查單一目標。
+            profile = BuildQuickDiagnosticProfile(arguments, options, normalizedTarget);
         }
 
         var overriddenTarget = profile.TargetHost;
@@ -235,6 +246,23 @@ internal static class CliApplication
         };
 
         return new ProfileResolution(DiagnosticProfileLoader.Normalize(mergedProfile), resolvedProfilePath);
+    }
+
+    private static DiagnosticProfile BuildQuickDiagnosticProfile(
+        CliArguments arguments,
+        RouteAnalyzerOptions options,
+        string normalizedTarget)
+    {
+        return new DiagnosticProfile
+        {
+            ProfileName = "Quick Diagnostic",
+            Description = "Ad hoc route diagnostic without a saved helpdesk profile.",
+            PreferredLanguage = arguments.Language ?? ReportLanguage.English,
+            TargetHost = normalizedTarget,
+            PingCount = arguments.PingCount ?? options.DefaultPingCount,
+            MaxHops = arguments.MaxHops ?? options.DefaultMaxHops,
+            IncludeGeoDetails = arguments.IncludeGeoDetails ?? options.DefaultIncludeGeoDetails
+        };
     }
 
     private static void PrintHelp()
@@ -265,7 +293,26 @@ internal static class CliApplication
         Console.WriteLine("                                Write an editable sample profile JSON.");
         Console.WriteLine("  --force                       Allow overwriting when creating a sample profile.");
         Console.WriteLine("  --no-geo                      Disable geo enrichment.");
+        Console.WriteLine("  --no-open                     Do not auto-open the generated HTML report.");
         Console.WriteLine("  --help                        Show this help.");
+    }
+
+    private static void TryOpenPath(string path, string label)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
+
+            Console.WriteLine($"Opened {label}: {path}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Could not auto-open {label}: {ex.Message}");
+        }
     }
 
     private sealed record ProfileResolution(DiagnosticProfile Profile, string? ProfilePath);
@@ -305,6 +352,8 @@ internal sealed class CliArguments
 
     public bool Force { get; private init; }
 
+    public bool SuppressAutoOpen { get; private init; }
+
     public static CliArguments Parse(string[] args)
     {
         if (args.Length == 0)
@@ -328,7 +377,9 @@ internal sealed class CliArguments
         var createSampleProfile = false;
         var consoleOnly = false;
         var force = false;
+        var suppressAutoOpen = false;
 
+        // CLI 保持簡單明確：依序讀 token，遇到已知參數就處理。
         for (var index = 0; index < args.Length; index++)
         {
             var token = args[index];
@@ -431,6 +482,10 @@ internal sealed class CliArguments
                     includeGeoDetails = false;
                     break;
 
+                case "--no-open":
+                    suppressAutoOpen = true;
+                    break;
+
                 default:
                     if (IsSwitch(token))
                     {
@@ -467,7 +522,8 @@ internal sealed class CliArguments
             Language = language,
             CreateSampleProfile = createSampleProfile,
             SampleProfilePath = sampleProfilePath,
-            Force = force
+            Force = force,
+            SuppressAutoOpen = suppressAutoOpen
         };
     }
 

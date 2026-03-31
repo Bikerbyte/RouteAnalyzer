@@ -288,6 +288,8 @@ public static partial class SupportReportLocalizer
             "ExecutionId" => zh ? "執行 ID" : "Execution ID",
             "FaultDomain" => zh ? "故障域" : "Fault domain",
             "Confidence" => zh ? "信心" : "Confidence",
+            "ChecksOverview" => zh ? "檢查概覽" : "Checks overview",
+            "DetailHint" => zh ? "完整細節請參考 HTML 報告、JSON 或 route-hops.csv。" : "For full detail, use the HTML report, JSON, or route-hops.csv.",
             "AverageLatency" => zh ? "平均延遲" : "Average latency",
             "PacketLoss" => zh ? "封包遺失" : "Packet loss",
             "Jitter" => zh ? "抖動" : "Jitter",
