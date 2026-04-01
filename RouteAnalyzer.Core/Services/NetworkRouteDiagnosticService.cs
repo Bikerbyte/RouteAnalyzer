@@ -555,7 +555,7 @@ public partial class NetworkRouteDiagnosticService
             return $"Average ping is {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms and the primary signal is: {suspectedIssue}. Compare with repeated runs across different times to confirm whether the behavior is stable.";
         }
 
-        return $"Average ping is {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms and the path does not show a clear latency step-up. If the workload still feels unstable, the issue may be bursty traffic behavior or target-side saturation.";
+        return $"Average ping is {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms and this path does not show a clear step-up that would justify a network-side conclusion from a single capture. If the slowdown still happens, re-run during the issue window and compare with another network or app-side evidence.";
     }
 
     private static string DetermineStatusLabel(IReadOnlyList<RouteHop> hops, PingSummary pingSummary, string? tracerouteError)

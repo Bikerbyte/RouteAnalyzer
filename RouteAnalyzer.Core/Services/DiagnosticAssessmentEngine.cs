@@ -200,6 +200,10 @@ public static class DiagnosticAssessmentEngine
         {
             evidence.Add($"Packet loss observed: {route.PingSummary.PacketLossPercent}%.");
         }
+        else
+        {
+            evidence.Add("No end-to-end packet loss was observed.");
+        }
 
         if (firstSpike is not null)
         {

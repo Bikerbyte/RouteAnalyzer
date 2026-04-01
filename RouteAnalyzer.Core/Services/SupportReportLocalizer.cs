@@ -266,7 +266,7 @@ public static partial class SupportReportLocalizer
             "Observations" => zh ? "觀察到的訊號" : "Observations",
             "Interpretation" => zh ? "判讀" : "Interpretation",
             "SuspiciousSignals" => zh ? "值得注意的訊號" : "Highlighted anomalies",
-            "NoSuspiciousSignals" => zh ? "這次執行沒有出現特別需要先注意的異常訊號。" : "No high-signal anomalies were highlighted in this run.",
+            "NoSuspiciousSignals" => zh ? "這次執行沒有看到高風險異常，但仍有一些低訊號 observation 值得記錄。" : "No high-risk anomaly was confirmed in this run, but a few low-signal observations are still worth noting.",
             "RecommendedNextAction" => zh ? "建議下一步" : "Recommended next action",
             "SuggestedEscalation" => zh ? "建議升級方向" : "Suggested escalation",
             "NetworkPosture" => zh ? "網路姿態" : "Network posture",
@@ -275,7 +275,7 @@ public static partial class SupportReportLocalizer
             "CopyItSummary" => zh ? "複製 IT 摘要" : "Copy IT summary",
             "CopyIncidentNote" => zh ? "複製事件摘要" : "Copy incident note",
             "Copied" => zh ? "已複製" : "Copied",
-            "NoSuspiciousHops" => zh ? "這次沒有需要優先關注的可疑 hop。" : "No suspicious hops were highlighted in this run.",
+            "NoSuspiciousHops" => zh ? "這次沒有看到需要直接判定為異常的 hop，但仍可留意 route 中較小的延遲變化。" : "No hop was strong enough to call out as a confirmed anomaly, but smaller route changes may still be worth noting.",
             "FullRouteDetail" => zh ? "完整路由細節" : "Full route detail",
             "ChecksOverview" => zh ? "檢查概覽" : "Checks overview",
             "DetailHint" => zh ? "完整細節請參考 HTML 報告、JSON 或 route-hops.csv。" : "For full detail, use the HTML report, JSON, or route-hops.csv.",
@@ -348,6 +348,10 @@ public static partial class SupportReportLocalizer
         if (route.PingSummary.PacketLossPercent > 0)
         {
             evidence.Add($"偵測到封包遺失: {route.PingSummary.PacketLossPercent}% 。");
+        }
+        else
+        {
+            evidence.Add("沒有看到端對端封包遺失。");
         }
 
         if (firstSpike is not null)
@@ -464,7 +468,7 @@ public static partial class SupportReportLocalizer
             return $"目前平均 Ping 為 {route.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，主要訊號是: {localizedIssue}。建議在不同時間多跑幾次，確認這個型態是否穩定存在。";
         }
 
-        return $"目前平均 Ping 為 {route.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，路徑沒有出現明顯延遲階梯。如果體感仍然不穩，可能偏向突發流量行為或目標端飽和。";
+        return $"目前平均 Ping 為 {route.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，這次路徑沒有看到足以直接判定問題的明顯階梯。若體感仍然不穩，建議在問題發生當下再重跑一次，並和其他網路或應用端資訊一起比對。";
     }
 
     [GeneratedRegex(@"Latency increases noticeably from hop (?<hop>\d+)", RegexOptions.CultureInvariant)]

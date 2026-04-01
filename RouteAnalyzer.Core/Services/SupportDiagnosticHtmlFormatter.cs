@@ -402,6 +402,7 @@ internal static class SupportDiagnosticHtmlFormatter
         var signals = new List<string>();
         var route = report.PrimaryRoute;
         var firstSpike = route.Hops.FirstOrDefault(static hop => hop.SuspectedSpike);
+        var noteworthyHop = firstSpike ?? GetMostNoteworthyLatencyStep(route);
         var timeoutHops = route.Hops.Where(static hop => hop.IsTimeout).Select(static hop => hop.HopNumber).ToArray();
         var failedDns = report.DnsResults.Where(static result => !result.Success).ToArray();
         var failedTcp = report.TcpResults.Where(static result => !result.Success).ToArray();
@@ -414,15 +415,20 @@ internal static class SupportDiagnosticHtmlFormatter
                 : $"Packet loss was observed at {route.PingSummary.PacketLossPercent}%.");
         }
 
-        if (firstSpike is not null)
+        if (noteworthyHop is not null)
         {
             var scopeLabel = zh
-                ? SupportReportLocalizer.GetHopScopeLabel(firstSpike, ReportLanguage.TraditionalChinese)
-                : firstSpike.ScopeLabel;
+                ? SupportReportLocalizer.GetHopScopeLabel(noteworthyHop, ReportLanguage.TraditionalChinese)
+                : noteworthyHop.ScopeLabel;
+            var delta = noteworthyHop.LatencyDeltaMs ?? 0;
 
-            signals.Add(zh
-                ? $"延遲階梯從第 {firstSpike.HopNumber} 跳開始，位置接近 {scopeLabel}。"
-                : $"Latency begins stepping up around hop {firstSpike.HopNumber} near {scopeLabel}.");
+            signals.Add(noteworthyHop.SuspectedSpike
+                ? (zh
+                    ? $"延遲階梯從第 {noteworthyHop.HopNumber} 跳開始，位置接近 {scopeLabel}。"
+                    : $"Latency begins stepping up around hop {noteworthyHop.HopNumber} near {scopeLabel}.")
+                : (zh
+                    ? $"第 {noteworthyHop.HopNumber} 跳可看到約 +{delta} ms 的延遲增加，但後續 hop 仍需要一起判讀。"
+                    : $"A smaller latency step-up of about +{delta} ms is visible around hop {noteworthyHop.HopNumber}, but downstream hops still need to be read together."));
         }
 
         if (timeoutHops.Length > 0)
@@ -447,6 +453,13 @@ internal static class SupportDiagnosticHtmlFormatter
             signals.Add(zh
                 ? $"TCP 端點失敗: {failedEndpoints}。"
                 : $"TCP endpoint failures were observed for: {failedEndpoints}.");
+        }
+
+        if (signals.Count == 0)
+        {
+            signals.Add(zh
+                ? "沒有看到高風險異常，但這次 capture 仍可作為後續比對的基準。"
+                : "No high-risk anomaly was confirmed, but this capture is still useful as a baseline for comparison.");
         }
 
         return signals;
@@ -486,6 +499,20 @@ internal static class SupportDiagnosticHtmlFormatter
             }
 
             rows.Add(new RouteSignalRow(hop.HopNumber.ToString(), signal, interpretation));
+        }
+
+        if (rows.Count == 0)
+        {
+            var noteworthyHop = GetMostNoteworthyLatencyStep(report.PrimaryRoute);
+            if (noteworthyHop is not null && noteworthyHop.LatencyDeltaMs is int delta)
+            {
+                rows.Add(new RouteSignalRow(
+                    noteworthyHop.HopNumber.ToString(),
+                    zh ? $"+{delta} ms 較小延遲變化" : $"+{delta} ms smaller step-up",
+                    zh
+                        ? "值得記錄，但目前還不足以單獨視為故障 hop。"
+                        : "Worth recording, but not strong enough on its own to call a fault hop."));
+            }
         }
 
         return rows;
@@ -680,6 +707,14 @@ internal static class SupportDiagnosticHtmlFormatter
     private static string EscapeForScriptTag(string value)
     {
         return value.Replace("</script>", "<\\/script>", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static RouteHop? GetMostNoteworthyLatencyStep(RouteDiagnosticReport route)
+    {
+        return route.Hops
+            .Where(static hop => !hop.SuspectedSpike && !hop.IsTimeout && (hop.LatencyDeltaMs ?? 0) >= 10)
+            .OrderByDescending(static hop => hop.LatencyDeltaMs ?? 0)
+            .FirstOrDefault();
     }
 
     private static string GetStatusClass(string statusLabel)
