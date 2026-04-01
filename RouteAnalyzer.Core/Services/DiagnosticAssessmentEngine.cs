@@ -4,6 +4,7 @@ namespace RouteAnalyzer.Services;
 
 public static class DiagnosticAssessmentEngine
 {
+    // Scenario keys are kept stable so reports and tests can rely on them.
     public const string ScenarioLocalDnsOrInitialConnectivity = "local-dns-or-initial-connectivity";
     public const string ScenarioCompanyEdgeServiceTcpFailure = "company-edge-service-tcp-failure";
     public const string ScenarioLocalNetworkOrWifi = "local-network-or-wifi";
@@ -19,6 +20,7 @@ public static class DiagnosticAssessmentEngine
         IReadOnlyList<DnsLookupResult> dnsResults,
         IReadOnlyList<TcpEndpointResult> tcpResults)
     {
+        // Build a small set of reusable signals first so the attribution rules below stay readable.
         var failedDns = dnsResults.Where(static result => !result.Success).ToArray();
         var failedTcp = tcpResults.Where(static result => !result.Success).ToArray();
         var firstSpike = route.Hops.FirstOrDefault(static hop => hop.SuspectedSpike);
@@ -39,6 +41,7 @@ public static class DiagnosticAssessmentEngine
         string scenarioKey;
         List<string> recommendations;
 
+        // Rule block: fail early when the device cannot even resolve or start the route.
         if (dnsResults.Count > 0 && failedDns.Length == dnsResults.Count && route.PingSummary.Received == 0)
         {
             scenarioKey = ScenarioLocalDnsOrInitialConnectivity;
@@ -54,6 +57,7 @@ public static class DiagnosticAssessmentEngine
                 "If the device is on VPN-required DNS, confirm the VPN client is running correctly."
             ];
         }
+        // Rule block: route is reachable, but the service edge itself is not accepting traffic.
         else if (tcpResults.Count > 0 && failedTcp.Length == tcpResults.Count && routeHealthy && failedDns.Length == 0)
         {
             scenarioKey = ScenarioCompanyEdgeServiceTcpFailure;
@@ -69,6 +73,7 @@ public static class DiagnosticAssessmentEngine
                 "Review server-side logs for refused or timed-out connections at the reported time."
             ];
         }
+        // Rule block: the first clear degradation is close to the user device or gateway.
         else if (firstHopIssue is not null || severeLoss)
         {
             scenarioKey = ScenarioLocalNetworkOrWifi;
@@ -86,6 +91,7 @@ public static class DiagnosticAssessmentEngine
                 "If available, compare the same test from a mobile hotspot to isolate the home network."
             ];
         }
+        // Rule block: the path goes bad early, but not right on the device.
         else if (accessHopIssue is not null || (firstSpike is not null && firstSpike.HopNumber <= 2))
         {
             scenarioKey = ScenarioIspOrAccessNetwork;
@@ -103,6 +109,7 @@ public static class DiagnosticAssessmentEngine
                 "Capture one or two repeat runs at different times to check whether the issue is bursty or sustained."
             ];
         }
+        // Rule block: public transit looks suspicious before the destination segment.
         else if (firstSpike is not null && firstSpike.HopNumber < Math.Max(route.Hops.Count - 1, 3))
         {
             scenarioKey = ScenarioInternetTransitPath;
@@ -118,6 +125,7 @@ public static class DiagnosticAssessmentEngine
                 "If business impact is high, collect multiple reports and escalate with the ISP or upstream provider."
             ];
         }
+        // Rule block: later hops or service probes point to the company side.
         else if (finalHopIssue || failedTcp.Length > 0)
         {
             scenarioKey = ScenarioCompanyNetworkOrDestinationService;
@@ -135,6 +143,7 @@ public static class DiagnosticAssessmentEngine
                 "Correlate with server-side monitoring and logs for the same time window."
             ];
         }
+        // Rule block: all current checks look healthy, so avoid over-claiming a network fault.
         else if (routeHealthy && failedDns.Length == 0 && failedTcp.Length == 0)
         {
             scenarioKey = ScenarioNoClearNetworkFaultDetected;
@@ -150,6 +159,7 @@ public static class DiagnosticAssessmentEngine
                 "Compare this result with another run from the same device on a different network."
             ];
         }
+        // Fallback: keep the message useful even when the evidence is mixed.
         else
         {
             scenarioKey = ScenarioIntermittentOrInconclusive;
@@ -189,6 +199,8 @@ public static class DiagnosticAssessmentEngine
         IReadOnlyList<DnsLookupResult> dnsResults,
         IReadOnlyList<TcpEndpointResult> tcpResults)
     {
+        // Keep evidence short and support-oriented:
+        // enough to explain the result without turning the summary into raw telemetry.
         var evidence = new List<string>
         {
             $"Ping success rate: {route.PingSummary.SuccessRatePercent}% with average latency {(route.PingSummary.AverageRoundTripMs?.ToString() ?? "-")} ms."

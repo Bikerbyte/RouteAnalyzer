@@ -8,6 +8,7 @@ namespace RouteAnalyzer.Services;
 
 public static class SupportDiagnosticExportFormatter
 {
+    // Summary sections stay intentionally short so the first screen is still usable.
     private const int MaxSummaryEvidenceItems = 4;
     private const int MaxSummaryRecommendationItems = 3;
 
@@ -25,6 +26,7 @@ public static class SupportDiagnosticExportFormatter
 
     public static string ToText(SupportDiagnosticReport report)
     {
+        // summary.txt is meant to be a quick handoff artifact, not the full raw dump.
         var language = ReportLanguage.Normalize(report.Profile.PreferredLanguage);
         var assessment = SupportReportLocalizer.GetAssessmentView(report, language);
         var route = SupportReportLocalizer.GetRouteView(report.PrimaryRoute, language);
@@ -93,6 +95,8 @@ public static class SupportDiagnosticExportFormatter
 
     public static string ToHtml(SupportDiagnosticReport report)
     {
+        // HTML is the main artifact for humans, so keep the summary visible
+        // and move raw detail into collapsible sections.
         var builder = new StringBuilder();
         var defaultLanguage = ReportLanguage.Normalize(report.Profile.PreferredLanguage);
         var htmlLanguageClass = ReportLanguage.IsTraditionalChinese(defaultLanguage) ? "lang-zh" : "lang-en";
@@ -246,6 +250,8 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine("        </ul>");
         builder.AppendLine("      </article>");
         builder.AppendLine("    </section>");
+        // DNS / TCP / route / raw output are still available,
+        // but they should not dominate the first screen.
         builder.AppendLine("    <details class=\"panel\">");
         builder.AppendLine($"      <summary><span>{Bilingual(SupportReportLocalizer.Text("DnsChecks", ReportLanguage.English), SupportReportLocalizer.Text("DnsChecks", ReportLanguage.TraditionalChinese))}</span><span class=\"summary-note\">{Encode(BuildDnsSummary(report))}</span></summary>");
         builder.AppendLine("      <div class=\"detail-body\">");
@@ -336,6 +342,7 @@ public static class SupportDiagnosticExportFormatter
 
     public static ReportArtifactBundle WriteBundle(SupportDiagnosticReport report, string directoryPath)
     {
+        // Keep the bundle predictable so support can zip or forward it without extra cleanup.
         var fullDirectoryPath = Path.GetFullPath(directoryPath);
         Directory.CreateDirectory(fullDirectoryPath);
 
@@ -412,6 +419,7 @@ public static class SupportDiagnosticExportFormatter
 
     private static bool IsRouteDetailWorthOpening(SupportDiagnosticReport report)
     {
+        // Auto-expand route detail only when it is likely to explain the current result.
         return !string.Equals(report.Assessment.OverallStatusLabel, "Healthy", StringComparison.OrdinalIgnoreCase)
             || report.PrimaryRoute.PingSummary.PacketLossPercent > 0
             || report.PrimaryRoute.Hops.Any(static hop => hop.SuspectedSpike || hop.IsTimeout);
