@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
@@ -47,6 +48,7 @@ public sealed class SupportDiagnosticService
         var assessment = DiagnosticAssessmentEngine.Assess(profile, routeReport, dnsResults, tcpResults);
 
         stopwatch.Stop();
+        var networkContext = BuildNetworkContext();
 
         _logger.LogInformation(
             "Completed support diagnostic {ExecutionId} in {DurationMs} ms with status {StatusLabel}",
@@ -61,6 +63,7 @@ public sealed class SupportDiagnosticService
             DurationMs = stopwatch.ElapsedMilliseconds,
             MachineName = Environment.MachineName,
             RuntimeSummary = $"{RuntimeInformation.OSDescription.Trim()} | .NET {Environment.Version}",
+            NetworkContext = networkContext,
             Profile = profile,
             Assessment = assessment,
             PrimaryRoute = routeReport,
@@ -77,6 +80,85 @@ public sealed class SupportDiagnosticService
             PingCount = profile.PingCount,
             MaxHops = profile.MaxHops,
             IncludeGeoDetails = profile.IncludeGeoDetails
+        };
+    }
+
+    private static NetworkContextSnapshot BuildNetworkContext()
+    {
+        try
+        {
+            var activeInterfaces = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(static networkInterface =>
+                    networkInterface.OperationalStatus == OperationalStatus.Up &&
+                    networkInterface.NetworkInterfaceType is not NetworkInterfaceType.Loopback &&
+                    networkInterface.NetworkInterfaceType is not NetworkInterfaceType.Tunnel)
+                .Select(networkInterface => new
+                {
+                    NetworkInterface = networkInterface,
+                    Properties = networkInterface.GetIPProperties(),
+                    Gateways = networkInterface.GetIPProperties().GatewayAddresses
+                        .Select(static gateway => gateway.Address)
+                        .Where(static address => address is not null && !address.Equals(IPAddress.Any) && !address.Equals(IPAddress.IPv6Any))
+                        .Select(static address => address!.ToString())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray(),
+                    DnsServers = networkInterface.GetIPProperties().DnsAddresses
+                        .Where(static address => address is not null)
+                        .Select(static address => address.ToString())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray()
+                })
+                .ToArray();
+
+            var primaryInterface = activeInterfaces
+                .OrderByDescending(candidate => candidate.Gateways.Length > 0)
+                .ThenByDescending(candidate => candidate.NetworkInterface.Speed)
+                .FirstOrDefault();
+
+            if (primaryInterface is null)
+            {
+                return CreateFallbackNetworkContext();
+            }
+
+            return new NetworkContextSnapshot
+            {
+                ConnectionType = DescribeConnectionType(primaryInterface.NetworkInterface.NetworkInterfaceType),
+                ActiveAdapterName = string.IsNullOrWhiteSpace(primaryInterface.NetworkInterface.Name) ? "-" : primaryInterface.NetworkInterface.Name,
+                DefaultGateway = primaryInterface.Gateways.FirstOrDefault() ?? "-",
+                DnsServers = primaryInterface.DnsServers.Length > 0 ? primaryInterface.DnsServers : ["-"]
+            };
+        }
+        catch
+        {
+            return CreateFallbackNetworkContext();
+        }
+    }
+
+    private static NetworkContextSnapshot CreateFallbackNetworkContext()
+    {
+        return new NetworkContextSnapshot
+        {
+            ConnectionType = "Unknown",
+            ActiveAdapterName = "-",
+            DefaultGateway = "-",
+            DnsServers = ["-"]
+        };
+    }
+
+    private static string DescribeConnectionType(NetworkInterfaceType interfaceType)
+    {
+        return interfaceType switch
+        {
+            NetworkInterfaceType.Wireless80211 => "Wi-Fi",
+            NetworkInterfaceType.Ethernet or
+            NetworkInterfaceType.Ethernet3Megabit or
+            NetworkInterfaceType.FastEthernetFx or
+            NetworkInterfaceType.FastEthernetT or
+            NetworkInterfaceType.GigabitEthernet => "Ethernet",
+            NetworkInterfaceType.Ppp => "PPP",
+            NetworkInterfaceType.Wwanpp or
+            NetworkInterfaceType.Wwanpp2 => "Cellular",
+            _ => "Other"
         };
     }
 

@@ -133,6 +133,13 @@ public class SupportDiagnosticExportFormatterTests
             DurationMs = 2200,
             MachineName = "CLIENT-01",
             RuntimeSummary = "Windows | .NET 10",
+            NetworkContext = new NetworkContextSnapshot
+            {
+                ConnectionType = "Wi-Fi",
+                ActiveAdapterName = "Intel Wi-Fi 6",
+                DefaultGateway = "192.168.1.1",
+                DnsServers = ["192.168.1.1", "1.1.1.1"]
+            },
             Profile = new DiagnosticProfile
             {
                 ProfileName = "Remote Support - VPN",

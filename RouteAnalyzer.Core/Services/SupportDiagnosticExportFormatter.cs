@@ -40,6 +40,10 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine($"{SupportReportLocalizer.Text("ExecutionId", language),-12} : {report.ExecutionId}");
         builder.AppendLine($"{SupportReportLocalizer.Text("Generated", language),-12} : {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss 'UTC'}");
         builder.AppendLine($"{SupportReportLocalizer.Text("Machine", language),-12} : {report.MachineName}");
+        builder.AppendLine($"{SupportReportLocalizer.Text("ConnectionType", language),-12} : {report.NetworkContext.ConnectionType}");
+        builder.AppendLine($"{SupportReportLocalizer.Text("ActiveAdapter", language),-12} : {report.NetworkContext.ActiveAdapterName}");
+        builder.AppendLine($"{SupportReportLocalizer.Text("DefaultGateway", language),-12} : {report.NetworkContext.DefaultGateway}");
+        builder.AppendLine($"{SupportReportLocalizer.Text("DnsServers", language),-12} : {string.Join(", ", report.NetworkContext.DnsServers)}");
         builder.AppendLine($"Profile      : {report.Profile.ProfileName}");
         builder.AppendLine($"{SupportReportLocalizer.Text("Company", language),-12} : {report.Profile.CompanyName ?? "-"}");
         builder.AppendLine($"{SupportReportLocalizer.Text("Target", language),-12} : {report.Profile.TargetHost}");
