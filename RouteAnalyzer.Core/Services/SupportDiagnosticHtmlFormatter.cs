@@ -54,6 +54,12 @@ internal static class SupportDiagnosticHtmlFormatter
                 ["zh-TW"] = BuildIncidentNoteCopy(report, assessmentZh, routeZh, nextActionZh, ReportLanguage.TraditionalChinese)
             }
         });
+        var initialCopyItSummaryLabel = ReportLanguage.IsTraditionalChinese(defaultLanguage)
+            ? SupportReportLocalizer.Text("CopyItSummary", ReportLanguage.TraditionalChinese)
+            : SupportReportLocalizer.Text("CopyItSummary", ReportLanguage.English);
+        var initialCopyIncidentNoteLabel = ReportLanguage.IsTraditionalChinese(defaultLanguage)
+            ? SupportReportLocalizer.Text("CopyIncidentNote", ReportLanguage.TraditionalChinese)
+            : SupportReportLocalizer.Text("CopyIncidentNote", ReportLanguage.English);
 
         return $$"""
 <!DOCTYPE html>
@@ -164,8 +170,8 @@ internal static class SupportDiagnosticHtmlFormatter
           <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("NetworkPosture", ReportLanguage.English), SupportReportLocalizer.Text("NetworkPosture", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(networkPostureEn, networkPostureZh)}}</span></div>
         </div>
         <div class="button-row">
-          <button type="button" class="btn" data-copy-key="itSummary" data-label-en="{{Encode(SupportReportLocalizer.Text("CopyItSummary", ReportLanguage.English))}}" data-label-zh="{{Encode(SupportReportLocalizer.Text("CopyItSummary", ReportLanguage.TraditionalChinese))}}"></button>
-          <button type="button" class="btn" data-copy-key="incidentNote" data-label-en="{{Encode(SupportReportLocalizer.Text("CopyIncidentNote", ReportLanguage.English))}}" data-label-zh="{{Encode(SupportReportLocalizer.Text("CopyIncidentNote", ReportLanguage.TraditionalChinese))}}"></button>
+          <button type="button" class="btn" data-copy-key="itSummary" data-label-en="{{Encode(SupportReportLocalizer.Text("CopyItSummary", ReportLanguage.English))}}" data-label-zh="{{Encode(SupportReportLocalizer.Text("CopyItSummary", ReportLanguage.TraditionalChinese))}}">{{Encode(initialCopyItSummaryLabel)}}</button>
+          <button type="button" class="btn" data-copy-key="incidentNote" data-label-en="{{Encode(SupportReportLocalizer.Text("CopyIncidentNote", ReportLanguage.English))}}" data-label-zh="{{Encode(SupportReportLocalizer.Text("CopyIncidentNote", ReportLanguage.TraditionalChinese))}}">{{Encode(initialCopyIncidentNoteLabel)}}</button>
         </div>
       </aside>
     </div>
@@ -207,7 +213,7 @@ internal static class SupportDiagnosticHtmlFormatter
       <div class="detail-body"><pre>{{Encode(string.Join(Environment.NewLine, report.PrimaryRoute.RawTracerouteLines))}}</pre></div>
     </details>
   </div>
-  <script type="application/json" id="copy-payload">{{Encode(copyPayload)}}</script>
+  <script type="application/json" id="copy-payload">{{EscapeForScriptTag(copyPayload)}}</script>
   <script>
     (() => {
       const root = document.documentElement;
@@ -669,6 +675,11 @@ internal static class SupportDiagnosticHtmlFormatter
     private static string Encode(string value)
     {
         return WebUtility.HtmlEncode(value);
+    }
+
+    private static string EscapeForScriptTag(string value)
+    {
+        return value.Replace("</script>", "<\\/script>", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetStatusClass(string statusLabel)
