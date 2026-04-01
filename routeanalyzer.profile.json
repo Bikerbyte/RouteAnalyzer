@@ -1,0 +1,24 @@
+{
+  "profileName": "Remote Support - Network",
+  "companyName": "Blibli",
+  "description": "One-click remote access checks for users who report slow VPN or remote desktop sessions.",
+  "preferredLanguage": "en",
+  "targetHost": "https://www.bilibili.com/",
+  "pingCount": 4,
+  "maxHops": 24,
+  "includeGeoDetails": true,
+  "dnsLookups": [
+    {
+      "name": "VPN gateway DNS",
+      "hostname": "https://www.bilibili.com/"
+    }
+  ],
+  "tcpEndpoints": [
+    {
+      "name": "VPN gateway HTTPS",
+      "host": "https://www.bilibili.com/",
+      "port": 443,
+      "timeoutMs": null
+    }
+  ]
+}

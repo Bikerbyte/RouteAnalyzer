@@ -272,8 +272,6 @@ public static partial class SupportReportLocalizer
             "SuspiciousSignals" => zh ? "值得注意的訊號" : "Highlighted anomalies",
             "NoSuspiciousSignals" => zh ? "這次執行沒有看到高風險異常，但仍有一些低訊號 observation 值得記錄。" : "No high-risk anomaly was confirmed in this run, but a few low-signal observations are still worth noting.",
             "RecommendedNextAction" => zh ? "建議下一步" : "Recommended next action",
-            "SuggestedEscalation" => zh ? "建議升級方向" : "Suggested escalation",
-            "NetworkPosture" => zh ? "網路姿態" : "Network posture",
             "Latency" => zh ? "延遲" : "Latency",
             "Signal" => zh ? "訊號" : "Signal",
             "CopyItSummary" => zh ? "複製 IT 摘要" : "Copy IT summary",

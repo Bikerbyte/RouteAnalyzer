@@ -37,10 +37,7 @@ internal static class SupportDiagnosticHtmlFormatter
         var generatedDisplay = report.GeneratedAtUtc.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
         var nextActionEn = BuildRecommendedNextAction(assessmentEn, ReportLanguage.English);
         var nextActionZh = BuildRecommendedNextAction(assessmentZh, ReportLanguage.TraditionalChinese);
-        var suggestedEscalationEn = BuildSuggestedEscalation(report, ReportLanguage.English);
-        var suggestedEscalationZh = BuildSuggestedEscalation(report, ReportLanguage.TraditionalChinese);
-        var networkPostureEn = BuildNetworkPosture(report, ReportLanguage.English);
-        var networkPostureZh = BuildNetworkPosture(report, ReportLanguage.TraditionalChinese);
+
         var copyPayload = JsonSerializer.Serialize(new Dictionary<string, Dictionary<string, string>>
         {
             ["itSummary"] = new()
@@ -104,7 +101,7 @@ internal static class SupportDiagnosticHtmlFormatter
     table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
     th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
     th { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-    .chart { margin-top: 10px; height: 140px; border: 1px solid var(--line); border-radius: 10px; background: linear-gradient(to top, rgba(17,24,39,.04) 1px, transparent 1px) 0 0/100% 35px, linear-gradient(to right, rgba(17,24,39,.04) 1px, transparent 1px) 0 0/48px 100%; position: relative; overflow: hidden; }
+    .chart { margin-top: 10px; height: 160px; border: 1px solid var(--line); border-radius: 10px; background: linear-gradient(to top, rgba(17,24,39,.04) 1px, transparent 1px) 0 0/100% 35px, linear-gradient(to right, rgba(17,24,39,.04) 1px, transparent 1px) 0 0/48px 100%; position: relative; overflow: hidden; }
     .chart svg { position: absolute; inset: 0; }
     details { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
     summary { cursor: pointer; padding: 14px 16px; font-weight: 700; list-style: none; }
@@ -127,7 +124,7 @@ internal static class SupportDiagnosticHtmlFormatter
   <div class="page">
     <div class="header">
       <div>
-        <div class="eyebrow">{{Bilingual("RouteAnalyzer / Minimal triage report", "RouteAnalyzer / 極簡 triage 報告")}}</div>
+        <div class="eyebrow">{{Bilingual("RouteAnalyzer / Minimal triage report", "RouteAnalyzer / 分析結果")}}</div>
         <h1>{{Encode(report.Profile.ProfileName)}}</h1>
       </div>
       <div>
@@ -170,8 +167,6 @@ internal static class SupportDiagnosticHtmlFormatter
           <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("ActiveAdapter", ReportLanguage.English), SupportReportLocalizer.Text("ActiveAdapter", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(report.NetworkContext.ActiveAdapterName, report.NetworkContext.ActiveAdapterName)}}</span></div>
           <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("DefaultGateway", ReportLanguage.English), SupportReportLocalizer.Text("DefaultGateway", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(report.NetworkContext.DefaultGateway, report.NetworkContext.DefaultGateway)}}</span></div>
           <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("DnsServers", ReportLanguage.English), SupportReportLocalizer.Text("DnsServers", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(string.Join(", ", report.NetworkContext.DnsServers), string.Join(", ", report.NetworkContext.DnsServers))}}</span></div>
-          <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("SuggestedEscalation", ReportLanguage.English), SupportReportLocalizer.Text("SuggestedEscalation", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(suggestedEscalationEn, suggestedEscalationZh)}}</span></div>
-          <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("NetworkPosture", ReportLanguage.English), SupportReportLocalizer.Text("NetworkPosture", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(networkPostureEn, networkPostureZh)}}</span></div>
         </div>
         <div class="button-row">
           <button type="button" class="btn" data-copy-key="itSummary" data-label-en="{{Encode(SupportReportLocalizer.Text("CopyItSummary", ReportLanguage.English))}}" data-label-zh="{{Encode(SupportReportLocalizer.Text("CopyItSummary", ReportLanguage.TraditionalChinese))}}">{{Encode(initialCopyItSummaryLabel)}}</button>
@@ -541,11 +536,11 @@ internal static class SupportDiagnosticHtmlFormatter
         }
 
         const double width = 800;
-        const double height = 140;
-        const double leftPadding = 24;
-        const double rightPadding = 24;
-        const double topPadding = 18;
-        const double bottomPadding = 12;
+        const double height = 160;
+        const double leftPadding = 48;
+        const double rightPadding = 20;
+        const double topPadding = 16;
+        const double bottomPadding = 28;
         var maxLatency = Math.Max(points.Max(static point => point.Latency), 20);
         var availableWidth = width - leftPadding - rightPadding;
         var availableHeight = height - topPadding - bottomPadding;
@@ -567,6 +562,8 @@ internal static class SupportDiagnosticHtmlFormatter
         }).ToArray();
 
         var polyline = string.Join(" ", coordinates.Select(point => $"{point.X:0.##},{point.Y:0.##}"));
+        var yTicks = BuildLatencyAxisTicks(maxLatency, width, height, leftPadding, rightPadding, topPadding, bottomPadding);
+        var xTicks = BuildHopAxisTicks(points.Select(static point => point.HopNumber).ToArray(), width, height, leftPadding, rightPadding, bottomPadding);
         var circles = string.Join(
             Environment.NewLine,
             coordinates
@@ -574,11 +571,79 @@ internal static class SupportDiagnosticHtmlFormatter
                 .Select(point => $"<circle cx=\"{point.X:0.##}\" cy=\"{point.Y:0.##}\" r=\"5\" fill=\"#d97706\" />"));
 
         return $$"""
-<svg viewBox="0 0 800 140" preserveAspectRatio="none" aria-hidden="true">
+<svg viewBox="0 0 800 160" preserveAspectRatio="none" aria-hidden="true">
+  {{yTicks}}
+  {{xTicks}}
+  <line x1="{{leftPadding:0.##}}" y1="{{height - bottomPadding:0.##}}" x2="{{width - rightPadding:0.##}}" y2="{{height - bottomPadding:0.##}}" stroke="rgba(107,114,128,.35)" stroke-width="1" />
+  <line x1="{{leftPadding:0.##}}" y1="{{topPadding:0.##}}" x2="{{leftPadding:0.##}}" y2="{{height - bottomPadding:0.##}}" stroke="rgba(107,114,128,.35)" stroke-width="1" />
   <polyline fill="none" stroke="#2563eb" stroke-width="3" points="{{polyline}}" />
   {{circles}}
 </svg>
 """;
+    }
+
+    private static string BuildLatencyAxisTicks(
+        int maxLatency,
+        double width,
+        double height,
+        double leftPadding,
+        double rightPadding,
+        double topPadding,
+        double bottomPadding)
+    {
+        var tickValues = new[]
+        {
+            0,
+            (int)Math.Ceiling(maxLatency / 2d),
+            maxLatency
+        }
+        .Distinct()
+        .OrderBy(static value => value)
+        .ToArray();
+
+        var availableHeight = height - topPadding - bottomPadding;
+        var builder = new StringBuilder();
+
+        foreach (var tickValue in tickValues)
+        {
+            var y = height - bottomPadding - (tickValue / (double)Math.Max(maxLatency, 1) * availableHeight);
+            builder.AppendLine($"<line x1=\"{leftPadding:0.##}\" y1=\"{y:0.##}\" x2=\"{width - rightPadding:0.##}\" y2=\"{y:0.##}\" stroke=\"rgba(107,114,128,.12)\" stroke-width=\"1\" />");
+            builder.AppendLine($"<text x=\"{leftPadding - 8:0.##}\" y=\"{y + 4:0.##}\" text-anchor=\"end\" font-size=\"11\" fill=\"#6b7280\">{tickValue} ms</text>");
+        }
+
+        return builder.ToString();
+    }
+
+    private static string BuildHopAxisTicks(
+        int[] hopNumbers,
+        double width,
+        double height,
+        double leftPadding,
+        double rightPadding,
+        double bottomPadding)
+    {
+        if (hopNumbers.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var tickIndexes = new[] { 0, hopNumbers.Length / 2, hopNumbers.Length - 1 }
+            .Distinct()
+            .OrderBy(static index => index)
+            .ToArray();
+        var availableWidth = width - leftPadding - rightPadding;
+        var builder = new StringBuilder();
+
+        foreach (var index in tickIndexes)
+        {
+            var x = hopNumbers.Length == 1
+                ? width / 2
+                : leftPadding + availableWidth * index / (hopNumbers.Length - 1d);
+            builder.AppendLine($"<line x1=\"{x:0.##}\" y1=\"{height - bottomPadding:0.##}\" x2=\"{x:0.##}\" y2=\"{height - bottomPadding + 5:0.##}\" stroke=\"rgba(107,114,128,.35)\" stroke-width=\"1\" />");
+            builder.AppendLine($"<text x=\"{x:0.##}\" y=\"{height - 8:0.##}\" text-anchor=\"middle\" font-size=\"11\" fill=\"#6b7280\">hop {hopNumbers[index]}</text>");
+        }
+
+        return builder.ToString();
     }
 
     private static string BuildRecommendedNextAction(LocalizedAssessmentView assessment, string language)
@@ -594,33 +659,6 @@ internal static class SupportDiagnosticHtmlFormatter
             : "Collect another capture while the issue is actively happening.";
     }
 
-    private static string BuildSuggestedEscalation(SupportDiagnosticReport report, string language)
-    {
-        var zh = ReportLanguage.IsTraditionalChinese(language);
-
-        return report.Assessment.ScenarioKey switch
-        {
-            DiagnosticAssessmentEngine.ScenarioLocalDnsOrInitialConnectivity => zh ? "本地網路 / DNS / VPN 前置連線" : "Local network / DNS / VPN pre-connect",
-            DiagnosticAssessmentEngine.ScenarioLocalNetworkOrWifi => zh ? "本地網路 / Wi-Fi" : "Local network / Wi-Fi",
-            DiagnosticAssessmentEngine.ScenarioIspOrAccessNetwork => zh ? "ISP / 接入網路" : "ISP / access network",
-            DiagnosticAssessmentEngine.ScenarioInternetTransitPath => zh ? "ISP / 上游路徑" : "ISP / upstream path",
-            DiagnosticAssessmentEngine.ScenarioCompanyEdgeServiceTcpFailure or DiagnosticAssessmentEngine.ScenarioCompanyNetworkOrDestinationService => zh ? "公司邊界 / 目標服務" : "Company edge / destination service",
-            DiagnosticAssessmentEngine.ScenarioNoClearNetworkFaultDetected => zh ? "應用程式 / VPN / 端點" : "App / VPN / endpoint",
-            _ => zh ? "先補收更多證據" : "Collect another capture first"
-        };
-    }
-
-    private static string BuildNetworkPosture(SupportDiagnosticReport report, string language)
-    {
-        var zh = ReportLanguage.IsTraditionalChinese(language);
-
-        return report.Assessment.OverallStatusLabel switch
-        {
-            "Healthy" => zh ? "可作為健康基準" : "Healthy baseline candidate",
-            "Action Needed" => zh ? "可帶著目前證據升級" : "Escalate with current evidence",
-            _ => zh ? "需要再補一次 capture" : "Needs follow-up capture"
-        };
-    }
 
     private static string BuildMetricNote(SupportDiagnosticReport report, string metric, string language)
     {
