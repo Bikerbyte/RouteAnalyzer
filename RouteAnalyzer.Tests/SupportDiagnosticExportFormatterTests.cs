@@ -143,7 +143,7 @@ public class SupportDiagnosticExportFormatterTests
             Profile = new DiagnosticProfile
             {
                 ProfileName = "Remote Support - VPN",
-                CompanyName = "Contoso",
+                DestinationName = "Contoso",
                 PreferredLanguage = preferredLanguage ?? ReportLanguage.English,
                 TargetHost = "vpn.example.com",
                 PingCount = 4,

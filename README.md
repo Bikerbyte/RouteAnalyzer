@@ -1,7 +1,7 @@
 # Route Analyzer
 
 Route Analyzer is a client-side network diagnostics EXE for helpdesk and remote support workflows.
-It is designed for the situation where a user says "remote access is slow" and IT needs evidence that separates local Wi-Fi, ISP, transit, DNS, and company-side service problems.
+It is designed for the situation where a user says "remote access is slow" and IT needs evidence that separates local Wi-Fi, ISP, transit, DNS, and destination-side service problems.
 
 ## What It Does
 
@@ -21,7 +21,7 @@ It is designed for the situation where a user says "remote access is slow" and I
   - local network or Wi-Fi
   - ISP / access network
   - public transit path
-  - company edge or destination service
+  - destination edge or destination service
   - DNS or initial connectivity
 
 ## Solution Shape

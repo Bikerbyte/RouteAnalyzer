@@ -299,7 +299,7 @@ public partial class NetworkRouteDiagnosticService
             var (scopeLabel, scopeDetail) = DescribeHop(targetHost, parsedHop.HopNumber, parsedHop.Address, isTimeout, reverseDns);
 
             var note = isTimeout
-                ? "This hop did not reply to ICMP. That alone does not prove a failure."
+                ? "This hop did not reply to ICMP."
                 : suspectedSpike
                     ? $"Latency increases by {latencyDelta} ms compared with the previous hop."
                     : "No obvious step-up is visible at this hop.";

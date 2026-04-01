@@ -45,7 +45,7 @@ public static class SupportDiagnosticExportFormatter
         builder.AppendLine($"{SupportReportLocalizer.Text("DefaultGateway", language),-12} : {report.NetworkContext.DefaultGateway}");
         builder.AppendLine($"{SupportReportLocalizer.Text("DnsServers", language),-12} : {string.Join(", ", report.NetworkContext.DnsServers)}");
         builder.AppendLine($"Profile      : {report.Profile.ProfileName}");
-        builder.AppendLine($"{SupportReportLocalizer.Text("Company", language),-12} : {report.Profile.CompanyName ?? "-"}");
+        builder.AppendLine($"{SupportReportLocalizer.Text("Destination", language),-12} : {report.Profile.DestinationName ?? "-"}");
         builder.AppendLine($"{SupportReportLocalizer.Text("Target", language),-12} : {report.Profile.TargetHost}");
         builder.AppendLine($"{SupportReportLocalizer.Text("Status", language),-12} : {assessment.OverallStatusLabel}");
         builder.AppendLine($"{SupportReportLocalizer.Text("PossibleFaultDomain", language),-12} : {assessment.FaultDomain}");

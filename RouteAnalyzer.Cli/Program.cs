@@ -245,7 +245,7 @@ internal static class CliApplication
         var mergedProfile = new DiagnosticProfile
         {
             ProfileName = profile.ProfileName,
-            CompanyName = profile.CompanyName,
+            DestinationName = profile.DestinationName,
             Description = profile.Description,
             PreferredLanguage = arguments.Language ?? profile.PreferredLanguage,
             TargetHost = overriddenTarget,

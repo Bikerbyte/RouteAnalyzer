@@ -103,6 +103,7 @@ internal static class SupportDiagnosticHtmlFormatter
     th { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
     .chart { margin-top: 10px; height: 160px; border: 1px solid var(--line); border-radius: 10px; background: linear-gradient(to top, rgba(17,24,39,.04) 1px, transparent 1px) 0 0/100% 35px, linear-gradient(to right, rgba(17,24,39,.04) 1px, transparent 1px) 0 0/48px 100%; position: relative; overflow: hidden; }
     .chart svg { position: absolute; inset: 0; }
+    .chart-axis { display: flex; justify-content: space-between; gap: 12px; padding: 8px 4px 0 48px; color: var(--muted); font-size: 12px; }
     details { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
     summary { cursor: pointer; padding: 14px 16px; font-weight: 700; list-style: none; }
     summary::-webkit-details-marker { display: none; }
@@ -161,7 +162,7 @@ internal static class SupportDiagnosticHtmlFormatter
       <aside class="section">
         <h2 style="font-size:16px;">{{Bilingual(SupportReportLocalizer.Text("RunDetails", ReportLanguage.English), SupportReportLocalizer.Text("RunDetails", ReportLanguage.TraditionalChinese))}}</h2>
         <div class="list">
-          <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("Company", ReportLanguage.English), SupportReportLocalizer.Text("Company", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(report.Profile.CompanyName ?? "-", report.Profile.CompanyName ?? "-")}}</span></div>
+          <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("Destination", ReportLanguage.English), SupportReportLocalizer.Text("Destination", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(report.Profile.DestinationName ?? "-", report.Profile.DestinationName ?? "-")}}</span></div>
           <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("Generated", ReportLanguage.English), SupportReportLocalizer.Text("Generated", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(generatedDisplay, generatedDisplay)}}</span></div>
           <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("ConnectionType", ReportLanguage.English), SupportReportLocalizer.Text("ConnectionType", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(report.NetworkContext.ConnectionType, report.NetworkContext.ConnectionType)}}</span></div>
           <div class="row"><span>{{Bilingual(SupportReportLocalizer.Text("ActiveAdapter", ReportLanguage.English), SupportReportLocalizer.Text("ActiveAdapter", ReportLanguage.TraditionalChinese))}}</span><span>{{Bilingual(report.NetworkContext.ActiveAdapterName, report.NetworkContext.ActiveAdapterName)}}</span></div>
@@ -193,6 +194,7 @@ internal static class SupportDiagnosticHtmlFormatter
       <p class="subtle" style="margin-top:8px;">{{Bilingual(routeEn.StatusSummary, routeZh.StatusSummary)}}</p>
       <p class="subtle" style="margin-top:8px;">{{Bilingual(routeEn.Narrative, routeZh.Narrative)}}</p>
       <div class="chart">{{BuildLatencyTrendSvg(report)}}</div>
+      <div class="chart-axis">{{RenderHopAxisLabels(report)}}</div>
       {{RenderSuspiciousHopTable(suspiciousRowsEn, suspiciousRowsZh)}}
     </section>
     <details{{(IsRouteDetailWorthOpening(report) ? " open" : string.Empty)}}>
@@ -640,10 +642,31 @@ internal static class SupportDiagnosticHtmlFormatter
                 ? width / 2
                 : leftPadding + availableWidth * index / (hopNumbers.Length - 1d);
             builder.AppendLine($"<line x1=\"{x:0.##}\" y1=\"{height - bottomPadding:0.##}\" x2=\"{x:0.##}\" y2=\"{height - bottomPadding + 5:0.##}\" stroke=\"rgba(107,114,128,.35)\" stroke-width=\"1\" />");
-            builder.AppendLine($"<text x=\"{x:0.##}\" y=\"{height - 8:0.##}\" text-anchor=\"middle\" font-size=\"11\" fill=\"#6b7280\">hop {hopNumbers[index]}</text>");
         }
 
         return builder.ToString();
+    }
+
+    private static string RenderHopAxisLabels(SupportDiagnosticReport report)
+    {
+        var hopNumbers = report.PrimaryRoute.Hops
+            .Where(static hop => hop.AverageLatencyMs.HasValue)
+            .Select(static hop => hop.HopNumber)
+            .ToArray();
+
+        if (hopNumbers.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var tickIndexes = new[] { 0, hopNumbers.Length / 2, hopNumbers.Length - 1 }
+            .Distinct()
+            .OrderBy(static index => index)
+            .ToArray();
+
+        return string.Join(
+            string.Empty,
+            tickIndexes.Select(index => $"<span>hop {hopNumbers[index]}</span>"));
     }
 
     private static string BuildRecommendedNextAction(LocalizedAssessmentView assessment, string language)

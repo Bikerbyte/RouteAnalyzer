@@ -77,7 +77,7 @@ public static class DiagnosticProfileLoader
         return new DiagnosticProfile
         {
             ProfileName = "Remote Support - VPN",
-            CompanyName = "Contoso",
+            DestinationName = "Contoso",
             Description = "One-click remote access checks for users who report slow VPN or remote desktop sessions.",
             PreferredLanguage = ReportLanguage.English,
             TargetHost = "vpn.example.com",
@@ -172,7 +172,7 @@ public static class DiagnosticProfileLoader
         return new DiagnosticProfile
         {
             ProfileName = string.IsNullOrWhiteSpace(profile.ProfileName) ? "Remote Support" : profile.ProfileName.Trim(),
-            CompanyName = profile.CompanyName?.Trim(),
+            DestinationName = GetDestinationName(profile),
             Description = profile.Description?.Trim(),
             PreferredLanguage = ReportLanguage.Normalize(profile.PreferredLanguage),
             TargetHost = normalizedTarget,
@@ -182,6 +182,24 @@ public static class DiagnosticProfileLoader
             DnsLookups = normalizedDnsLookups,
             TcpEndpoints = normalizedTcpEndpoints
         };
+    }
+
+    private static string? GetDestinationName(DiagnosticProfile profile)
+    {
+        var destinationName = profile.DestinationName?.Trim();
+        if (!string.IsNullOrWhiteSpace(destinationName))
+        {
+            return destinationName;
+        }
+
+        if (profile.ExtraProperties is not null
+            && profile.ExtraProperties.TryGetValue("companyName", out var legacyValue)
+            && legacyValue.ValueKind == JsonValueKind.String)
+        {
+            return legacyValue.GetString()?.Trim();
+        }
+
+        return null;
     }
 }
 

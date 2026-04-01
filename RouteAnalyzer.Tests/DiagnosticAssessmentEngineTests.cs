@@ -37,7 +37,7 @@ public class DiagnosticAssessmentEngineTests
         var assessment = DiagnosticAssessmentEngine.Assess(profile, route, dnsResults, tcpResults);
 
         Assert.Equal("Action Needed", assessment.OverallStatusLabel);
-        Assert.Equal("Company edge or destination service", assessment.FaultDomain);
+        Assert.Equal("Destination edge or destination service", assessment.FaultDomain);
         Assert.Contains("more consistent", assessment.ItSummary, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -71,6 +71,122 @@ public class DiagnosticAssessmentEngineTests
         Assert.Equal("Local network or Wi-Fi", assessment.FaultDomain);
     }
 
+    [Fact]
+    public void Assess_WhenOnlyTimeoutObservationAndChecksPass_RemainsHealthy()
+    {
+        var profile = CreateProfile();
+        var route = CreateRouteReport(
+            statusLabel: "Observe",
+            packetLossPercent: 0,
+            hops:
+            [
+                new RouteHop
+                {
+                    HopNumber = 1,
+                    DisplayAddress = "192.168.1.1",
+                    Samples = ["1 ms", "1 ms", "1 ms"],
+                    AverageLatencyMs = 1,
+                    LatencyDeltaMs = null,
+                    IsTimeout = false,
+                    SuspectedSpike = false,
+                    ScopeLabel = "LAN / Gateway",
+                    ScopeDetail = "Usually the local router or first-hop gateway.",
+                    ReverseDns = null,
+                    GeoDetails = null,
+                    Note = "No obvious step-up is visible at this hop."
+                },
+                new RouteHop
+                {
+                    HopNumber = 2,
+                    DisplayAddress = "203.0.113.1",
+                    Samples = ["12 ms", "12 ms", "13 ms"],
+                    AverageLatencyMs = 12,
+                    LatencyDeltaMs = 11,
+                    IsTimeout = false,
+                    SuspectedSpike = false,
+                    ScopeLabel = "Access / ISP edge",
+                    ScopeDetail = "Usually near the local network boundary or ISP access edge.",
+                    ReverseDns = null,
+                    GeoDetails = null,
+                    Note = "No obvious step-up is visible at this hop."
+                },
+                new RouteHop
+                {
+                    HopNumber = 3,
+                    DisplayAddress = "203.0.113.2",
+                    Samples = ["13 ms", "12 ms", "12 ms"],
+                    AverageLatencyMs = 12,
+                    LatencyDeltaMs = 0,
+                    IsTimeout = false,
+                    SuspectedSpike = false,
+                    ScopeLabel = "Public hop",
+                    ScopeDetail = "Transit is still responding normally before the timeout hop.",
+                    ReverseDns = null,
+                    GeoDetails = null,
+                    Note = "No obvious step-up is visible at this hop."
+                },
+                new RouteHop
+                {
+                    HopNumber = 4,
+                    DisplayAddress = "ed",
+                    Samples = ["*", "*", "*"],
+                    AverageLatencyMs = null,
+                    LatencyDeltaMs = null,
+                    IsTimeout = true,
+                    SuspectedSpike = false,
+                    ScopeLabel = "No reply",
+                    ScopeDetail = "This hop did not reply to ICMP probes.",
+                    ReverseDns = null,
+                    GeoDetails = null,
+                    Note = "This hop did not reply to ICMP. That alone does not prove a failure."
+                },
+                new RouteHop
+                {
+                    HopNumber = 5,
+                    DisplayAddress = "203.0.113.10",
+                    Samples = ["15 ms", "14 ms", "14 ms"],
+                    AverageLatencyMs = 14,
+                    LatencyDeltaMs = null,
+                    IsTimeout = false,
+                    SuspectedSpike = false,
+                    ScopeLabel = "Public hop",
+                    ScopeDetail = "Public network transit resumed after the timeout hop.",
+                    ReverseDns = null,
+                    GeoDetails = null,
+                    Note = "No obvious step-up is visible at this hop."
+                }
+            ],
+            suspectedIssue: "One or more hops timed out, but timeout-only signals are inconclusive");
+        var dnsResults = new[]
+        {
+            new DnsLookupResult
+            {
+                Name = "VPN DNS",
+                Hostname = "vpn.example.com",
+                Success = true,
+                DurationMs = 14,
+                Addresses = ["203.0.113.10"]
+            }
+        };
+        var tcpResults = new[]
+        {
+            new TcpEndpointResult
+            {
+                Name = "VPN 443",
+                Host = "vpn.example.com",
+                Port = 443,
+                Success = true,
+                DurationMs = 48
+            }
+        };
+
+        var assessment = DiagnosticAssessmentEngine.Assess(profile, route, dnsResults, tcpResults);
+
+        Assert.Equal("Healthy", assessment.OverallStatusLabel);
+        Assert.Equal("No clear network fault detected", assessment.FaultDomain);
+        Assert.Contains("timed out", assessment.UserSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static DiagnosticProfile CreateProfile()
     {
         return new DiagnosticProfile
@@ -82,7 +198,11 @@ public class DiagnosticAssessmentEngineTests
         };
     }
 
-    private static RouteDiagnosticReport CreateRouteReport(string statusLabel, int packetLossPercent, IReadOnlyList<RouteHop> hops)
+    private static RouteDiagnosticReport CreateRouteReport(
+        string statusLabel,
+        int packetLossPercent,
+        IReadOnlyList<RouteHop> hops,
+        string? suspectedIssue = null)
     {
         return new RouteDiagnosticReport
         {
@@ -110,7 +230,7 @@ public class DiagnosticAssessmentEngineTests
             DiagnosticMode = "ICMP ping + Windows tracert",
             TracerouteCommand = "tracert -d vpn.example.com",
             GeoDataProvider = "ipwho.is",
-            SuspectedIssue = null,
+            SuspectedIssue = suspectedIssue,
             RawTracerouteLines = ["trace output"]
         };
     }

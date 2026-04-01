@@ -1,6 +1,6 @@
 {
   "profileName": "Remote Support - Network",
-  "companyName": "Blibli",
+  "destinationName": "Blibli",
   "description": "One-click remote access checks for users who report slow VPN or remote desktop sessions.",
   "preferredLanguage": "en",
   "targetHost": "https://www.bilibili.com/",
