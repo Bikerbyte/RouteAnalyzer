@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
@@ -196,9 +197,7 @@ public partial class NetworkRouteDiagnosticService
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = ResolveCommandOutputEncoding(),
-                StandardErrorEncoding = ResolveCommandOutputEncoding()
+                CreateNoWindow = true
             }
         };
 
@@ -229,13 +228,13 @@ public partial class NetworkRouteDiagnosticService
 
         try
         {
-            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            var outputTask = ReadAllBytesAsync(process.StandardOutput.BaseStream, cancellationToken);
+            var errorTask = ReadAllBytesAsync(process.StandardError.BaseStream, cancellationToken);
 
             await process.WaitForExitAsync(timeoutCts.Token);
 
-            var output = await outputTask;
-            var error = await errorTask;
+            var output = CommandOutputDecoder.Decode(await outputTask);
+            var error = CommandOutputDecoder.Decode(await errorTask);
 
             var lines = (output + Environment.NewLine + error)
                 .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -620,21 +619,11 @@ public partial class NetworkRouteDiagnosticService
         return $"{RuntimeInformation.OSDescription.Trim()} | .NET {Environment.Version}";
     }
 
-    private static Encoding ResolveCommandOutputEncoding()
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return Encoding.UTF8;
-        }
-
-        try
-        {
-            return Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
-        }
-        catch
-        {
-            return Encoding.UTF8;
-        }
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken);
+        return buffer.ToArray();
     }
 
     private static int? ParseLatency(string value)

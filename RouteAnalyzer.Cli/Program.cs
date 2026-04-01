@@ -165,8 +165,7 @@ internal static class CliApplication
         builder.AppendLine("Route Analyzer");
         builder.AppendLine("--------------");
         builder.AppendLine($"Status      : {report.Assessment.OverallStatusLabel}");
-        builder.AppendLine($"Fault       : {report.Assessment.FaultDomain}");
-        builder.AppendLine($"Confidence  : {report.Assessment.ConfidenceLabel}");
+        builder.AppendLine($"Possible    : {report.Assessment.FaultDomain}");
         builder.AppendLine($"Target      : {report.Profile.TargetHost}");
         builder.AppendLine($"Ping Avg    : {report.PrimaryRoute.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms");
         builder.AppendLine($"Packet Loss : {report.PrimaryRoute.PingSummary.PacketLossPercent}%");
@@ -174,6 +173,17 @@ internal static class CliApplication
         builder.AppendLine($"TCP         : {(report.TcpResults.Count == 0 ? "n/a" : $"{tcpPassed}/{report.TcpResults.Count} pass")}");
         builder.AppendLine();
         builder.AppendLine(report.Assessment.UserSummary);
+
+        var highlightedSignals = report.Assessment.EvidenceHighlights.Take(2).ToArray();
+        if (highlightedSignals.Length > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("Observations:");
+            foreach (var signal in highlightedSignals)
+            {
+                builder.AppendLine($"- {signal}");
+            }
+        }
 
         if (report.Assessment.Recommendations.Count > 0)
         {

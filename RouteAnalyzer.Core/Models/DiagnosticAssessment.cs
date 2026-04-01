@@ -8,8 +8,6 @@ public sealed class DiagnosticAssessment
 
     public required string FaultDomain { get; init; }
 
-    public required string ConfidenceLabel { get; init; }
-
     public required string UserSummary { get; init; }
 
     public required string ItSummary { get; init; }

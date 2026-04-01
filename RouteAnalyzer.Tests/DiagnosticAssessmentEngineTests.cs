@@ -38,7 +38,7 @@ public class DiagnosticAssessmentEngineTests
 
         Assert.Equal("Action Needed", assessment.OverallStatusLabel);
         Assert.Equal("Company edge or destination service", assessment.FaultDomain);
-        Assert.Equal("High", assessment.ConfidenceLabel);
+        Assert.Contains("more consistent", assessment.ItSummary, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

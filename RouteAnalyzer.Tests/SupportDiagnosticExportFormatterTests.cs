@@ -10,8 +10,10 @@ public class SupportDiagnosticExportFormatterTests
     {
         var html = SupportDiagnosticExportFormatter.ToHtml(CreateReport());
 
-        Assert.Contains("User Summary", html);
-        Assert.Contains("IT Summary", html);
+        Assert.Contains("Overall finding", html);
+        Assert.Contains("Interpretation", html);
+        Assert.Contains("Highlighted anomalies", html);
+        Assert.Contains("Observations", html);
         Assert.Contains("DNS checks", html);
         Assert.Contains("TCP checks", html);
     }
@@ -24,7 +26,7 @@ public class SupportDiagnosticExportFormatterTests
         Assert.Contains("data-switch-language=\"en\"", html);
         Assert.Contains("data-switch-language=\"zh-TW\"", html);
         Assert.Contains("class=\"lang-zh\"", html);
-        Assert.Contains("\u4F7F\u7528\u8005\u6458\u8981", html);
+        Assert.Contains("\u7E3D\u9AD4\u89C0\u5BDF", html);
     }
 
     [Fact]
@@ -162,7 +164,6 @@ public class SupportDiagnosticExportFormatterTests
                 ScenarioKey = DiagnosticAssessmentEngine.ScenarioNoClearNetworkFaultDetected,
                 OverallStatusLabel = "Healthy",
                 FaultDomain = "No clear network fault detected",
-                ConfidenceLabel = "Medium",
                 UserSummary = "The current network path looks healthy.",
                 ItSummary = "No strong network-side issue stands out in this run.",
                 EvidenceHighlights =

@@ -35,7 +35,6 @@ public static class DiagnosticAssessmentEngine
 
         string overallStatus;
         string faultDomain;
-        string confidence;
         string userSummary;
         string itSummary;
         string scenarioKey;
@@ -47,9 +46,8 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioLocalDnsOrInitialConnectivity;
             overallStatus = "Action Needed";
             faultDomain = "Local DNS or initial connectivity";
-            confidence = "High";
-            userSummary = "The device could not resolve the required hostnames, so the connection is failing before it reaches the company services.";
-            itSummary = "All configured DNS lookups failed and the route test received no ICMP replies. This strongly suggests a local resolver issue, disconnected internet access, or VPN pre-connect problem.";
+            userSummary = "This run is most consistent with a local DNS or early connectivity issue before traffic reaches the company side.";
+            itSummary = "All configured DNS lookups failed and the route test received no ICMP replies. This is more consistent with a local resolver issue, disconnected internet access, or a VPN pre-connect problem than with a company-side service issue.";
             recommendations =
             [
                 "Reconnect the local network or switch to another network and retry.",
@@ -63,9 +61,8 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioCompanyEdgeServiceTcpFailure;
             overallStatus = "Action Needed";
             faultDomain = "Company edge or destination service";
-            confidence = "High";
-            userSummary = "The route to the company looks reachable, but the actual service ports are not accepting connections.";
-            itSummary = "Route quality appears healthy while every configured TCP endpoint failed. That pattern points more to a service listener, firewall, VPN gateway, or company edge issue than a home network issue.";
+            userSummary = "This run suggests the route is reachable, but the destination service ports are still not accepting connections.";
+            itSummary = "Route quality appears healthy while every configured TCP endpoint failed. That pattern is more consistent with a service listener, firewall, VPN gateway, or company edge issue than with a home network issue.";
             recommendations =
             [
                 "Check the company VPN gateway, reverse proxy, firewall, or target service health.",
@@ -79,11 +76,10 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioLocalNetworkOrWifi;
             overallStatus = "Action Needed";
             faultDomain = "Local network or Wi-Fi";
-            confidence = firstHopIssue is not null ? "High" : "Medium";
-            userSummary = "The issue appears to start very close to the device, which usually means Wi-Fi quality, the local router, or the home network.";
+            userSummary = "This run suggests the issue starts very close to the device, which is often consistent with Wi-Fi quality, the local router, or the home network.";
             itSummary = firstHopIssue is not null
-                ? $"The first hop already shows degradation at hop {firstHopIssue.HopNumber} ({firstHopIssue.ScopeLabel}). Combined with packet loss {route.PingSummary.PacketLossPercent}%, this points to the user's LAN or gateway."
-                : $"Packet loss is {route.PingSummary.PacketLossPercent}% with no stronger downstream signal. Treat the local access network as the first suspect.";
+                ? $"The first hop already shows degradation at hop {firstHopIssue.HopNumber} ({firstHopIssue.ScopeLabel}). Combined with packet loss {route.PingSummary.PacketLossPercent}%, this is more consistent with the user's LAN or gateway."
+                : $"Packet loss is {route.PingSummary.PacketLossPercent}% with no stronger downstream signal. The local access network is still the first place to verify.";
             recommendations =
             [
                 "Ask the user to retry closer to the router or on wired ethernet if possible.",
@@ -97,11 +93,10 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioIspOrAccessNetwork;
             overallStatus = "Warning";
             faultDomain = "ISP or access network";
-            confidence = "Medium";
-            userSummary = "The path becomes unstable very early, which usually points to the ISP side rather than the company systems.";
+            userSummary = "This run suggests the path becomes unstable very early, which is often more consistent with the ISP side than with the company systems.";
             itSummary = accessHopIssue is not null
                 ? $"An abnormal signal appears by hop {accessHopIssue.HopNumber} ({accessHopIssue.ScopeLabel}). The issue likely sits between the user gateway and the ISP access edge."
-                : $"Latency rises sharply by hop {firstSpike!.HopNumber}. That is early enough to suspect the access ISP rather than the destination service.";
+                : $"Latency rises sharply by hop {firstSpike!.HopNumber}. That is early enough to suspect the access ISP before the destination service.";
             recommendations =
             [
                 "Retry the diagnostic from a different network, such as a hotspot, to confirm the ISP path.",
@@ -115,9 +110,8 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioInternetTransitPath;
             overallStatus = moderateLoss || failedTcp.Length > 0 ? "Warning" : "Healthy";
             faultDomain = "Internet transit path";
-            confidence = "Medium";
-            userSummary = "The route shows a delay increase in the public network path, so the slowdown may be happening between the ISP and the destination side.";
-            itSummary = $"Latency rises at hop {firstSpike.HopNumber}, after the access edge but before the destination. This looks more like transit or upstream path congestion than a purely local issue.";
+            userSummary = "This run shows a delay increase in the public network path, so the slowdown may be happening between the ISP and the destination side.";
+            itSummary = $"Latency rises at hop {firstSpike.HopNumber}, after the access edge but before the destination. This is more consistent with transit or upstream path congestion than with a purely local issue.";
             recommendations =
             [
                 "Repeat the test later to confirm whether the public path issue is persistent.",
@@ -131,11 +125,10 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioCompanyNetworkOrDestinationService;
             overallStatus = failedTcp.Length > 0 ? "Action Needed" : "Warning";
             faultDomain = "Company network or destination service";
-            confidence = failedTcp.Length > 0 ? "High" : "Medium";
-            userSummary = "The later part of the path is where the symptoms appear, so the issue is more likely near the company edge or service itself.";
+            userSummary = "This run suggests the later part of the path is where the symptoms appear, so the issue may be near the company edge or service itself.";
             itSummary = failedTcp.Length > 0
-                ? $"One or more destination service ports failed even though the route reached the later hops. Investigate the company edge, VPN listener, or target service."
-                : "The route remains mostly normal until the final segment, which suggests the company edge or destination host is the more likely fault domain.";
+                ? $"One or more destination service ports failed even though the route reached the later hops. Investigate the company edge, VPN listener, or target service first."
+                : "The route remains mostly normal until the final segment, which makes the company edge or destination host the more likely fault domain in this run.";
             recommendations =
             [
                 "Check VPN gateway, remote desktop gateway, reverse proxy, or destination service health.",
@@ -149,7 +142,6 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioNoClearNetworkFaultDetected;
             overallStatus = "Healthy";
             faultDomain = "No clear network fault detected";
-            confidence = "Medium";
             userSummary = "The route, DNS lookups, and service port checks all look healthy right now.";
             itSummary = "No strong network-side issue stands out in this run. If the user still feels slowness, the problem may be application-specific, intermittent, or workload-related.";
             recommendations =
@@ -165,7 +157,6 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioIntermittentOrInconclusive;
             overallStatus = "Warning";
             faultDomain = "Intermittent or inconclusive";
-            confidence = "Low";
             userSummary = "This run shows some warning signals, but they do not point to one clear fault domain yet.";
             itSummary = "The evidence is mixed. There are enough signals to keep investigating, but not enough to assign the fault confidently to home network, ISP, transit, or company edge.";
             recommendations =
@@ -183,7 +174,6 @@ public static class DiagnosticAssessmentEngine
             ScenarioKey = scenarioKey,
             OverallStatusLabel = overallStatus,
             FaultDomain = faultDomain,
-            ConfidenceLabel = confidence,
             UserSummary = userSummary,
             ItSummary = itSummary,
             EvidenceHighlights = evidence,
@@ -203,22 +193,22 @@ public static class DiagnosticAssessmentEngine
         // enough to explain the result without turning the summary into raw telemetry.
         var evidence = new List<string>
         {
-            $"Ping success rate: {route.PingSummary.SuccessRatePercent}% with average latency {(route.PingSummary.AverageRoundTripMs?.ToString() ?? "-")} ms."
+            $"Ping success rate observed: {route.PingSummary.SuccessRatePercent}% with average latency {(route.PingSummary.AverageRoundTripMs?.ToString() ?? "-")} ms."
         };
 
         if (route.PingSummary.PacketLossPercent > 0)
         {
-            evidence.Add($"Packet loss detected: {route.PingSummary.PacketLossPercent}%.");
+            evidence.Add($"Packet loss observed: {route.PingSummary.PacketLossPercent}%.");
         }
 
         if (firstSpike is not null)
         {
-            evidence.Add($"Latency step-up starts at hop {firstSpike.HopNumber} ({firstSpike.ScopeLabel}).");
+            evidence.Add($"Latency step-up begins around hop {firstSpike.HopNumber} ({firstSpike.ScopeLabel}).");
         }
 
         if (route.Hops.Any(static hop => hop.IsTimeout))
         {
-            evidence.Add("One or more traceroute hops timed out.");
+            evidence.Add("One or more traceroute hops timed out during this run.");
         }
 
         if (dnsResults.Count > 0)
@@ -238,7 +228,7 @@ public static class DiagnosticAssessmentEngine
 
         if (failedTcp.Count > 0)
         {
-            evidence.Add($"Failed TCP endpoints: {string.Join(", ", failedTcp.Select(static result => $"{result.Name} ({result.Host}:{result.Port})"))}.");
+            evidence.Add($"TCP endpoint failures observed: {string.Join(", ", failedTcp.Select(static result => $"{result.Name} ({result.Host}:{result.Port})"))}.");
         }
 
         return evidence;

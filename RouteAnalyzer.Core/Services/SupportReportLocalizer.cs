@@ -12,7 +12,6 @@ public static partial class SupportReportLocalizer
             return new LocalizedAssessmentView(
                 report.Assessment.OverallStatusLabel,
                 report.Assessment.FaultDomain,
-                report.Assessment.ConfidenceLabel,
                 report.Assessment.UserSummary,
                 report.Assessment.ItSummary,
                 report.Assessment.EvidenceHighlights,
@@ -32,16 +31,14 @@ public static partial class SupportReportLocalizer
             && (lastHop.IsTimeout || lastHop.SuspectedSpike || string.Equals(lastHop.ScopeLabel, "Destination", StringComparison.OrdinalIgnoreCase));
 
         var overallStatus = TranslateOverallStatus(report.Assessment.OverallStatusLabel, ReportLanguage.TraditionalChinese);
-        var confidence = TranslateConfidence(report.Assessment.ConfidenceLabel, ReportLanguage.TraditionalChinese);
 
         return report.Assessment.ScenarioKey switch
         {
             DiagnosticAssessmentEngine.ScenarioLocalDnsOrInitialConnectivity => new LocalizedAssessmentView(
                 overallStatus,
                 "本機 DNS 或起始連線",
-                confidence,
-                "裝置無法解析必要主機名稱，因此連線在抵達公司服務之前就已經失敗。",
-                "所有設定的 DNS 查詢都失敗，而且路由測試沒有收到 ICMP 回應。這通常代表本機解析器異常、網際網路未連線，或 VPN 尚未完成前置連線。",
+                "這次結果比較像是本機 DNS 或前段連線異常，流量還沒到公司端前就已經失敗。",
+                "所有設定的 DNS 查詢都失敗，而且路由測試沒有收到 ICMP 回應。這更接近本機解析器異常、網際網路未連線，或 VPN 尚未完成前置連線的情況。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
                     "重新連上目前的網路，或切換到另一個網路後再試一次。",
@@ -51,9 +48,8 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioCompanyEdgeServiceTcpFailure => new LocalizedAssessmentView(
                 overallStatus,
                 "公司邊界或目標服務",
-                confidence,
-                "到公司端的路徑看起來可達，但實際服務埠沒有接受連線。",
-                "路由品質看起來健康，且 DNS 解析成功，但所有設定的 TCP 端點都失敗。這種型態更像是服務監聽、防火牆、VPN gateway，或公司邊界設備的問題，而不是使用者家中網路。",
+                "這次結果顯示到公司端的路徑大致可達，但目標服務埠仍未接受連線。",
+                "路由品質看起來健康，且 DNS 解析成功，但所有設定的 TCP 端點都失敗。這種型態比較接近服務監聽、防火牆、VPN gateway 或公司邊界設備的問題，而不是使用者家中網路。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
                     "檢查公司 VPN gateway、reverse proxy、防火牆或目標服務的健康狀態。",
@@ -63,11 +59,10 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioLocalNetworkOrWifi => new LocalizedAssessmentView(
                 overallStatus,
                 "本地網路或 Wi-Fi",
-                confidence,
-                "問題看起來是在非常靠近這台裝置的位置開始，通常代表 Wi-Fi 品質、家用路由器，或本地網路有狀況。",
+                "這次結果比較像是在非常靠近這台裝置的位置開始出現問題，常見於 Wi-Fi 品質、家用路由器或本地網路。",
                 firstHopIssue is not null
-                    ? $"第一跳就出現異常，發生在第 {firstHopIssue.HopNumber} 跳（{GetHopScopeLabel(firstHopIssue, ReportLanguage.TraditionalChinese)}）。再加上封包遺失 {route.PingSummary.PacketLossPercent}% ，目前最優先懷疑使用者端 LAN 或 gateway。"
-                    : $"目前封包遺失為 {route.PingSummary.PacketLossPercent}% ，而且沒有更明確的下游訊號，應先把本地接入網路視為首要懷疑點。",
+                    ? $"第一跳就出現異常，發生在第 {firstHopIssue.HopNumber} 跳（{GetHopScopeLabel(firstHopIssue, ReportLanguage.TraditionalChinese)}）。再加上封包遺失 {route.PingSummary.PacketLossPercent}% ，目前比較接近使用者端 LAN 或 gateway。"
+                    : $"目前封包遺失為 {route.PingSummary.PacketLossPercent}% ，而且沒有更明確的下游訊號，建議先從本地接入網路開始確認。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
                     "請使用者靠近路由器重試；如果可行，優先改用有線網路。",
@@ -77,8 +72,7 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioIspOrAccessNetwork => new LocalizedAssessmentView(
                 overallStatus,
                 "ISP 或接入網路",
-                confidence,
-                "路徑在前幾跳就開始不穩定，這通常比較像 ISP 側，而不是公司系統本身。",
+                "這次結果顯示路徑在前幾跳就開始不穩定，較像 ISP 側或接入網路。",
                 accessHopIssue is not null
                     ? $"異常訊號在第 {accessHopIssue.HopNumber} 跳（{GetHopScopeLabel(accessHopIssue, ReportLanguage.TraditionalChinese)}）就出現，問題較可能位在使用者 gateway 與 ISP 接入邊界之間。"
                     : $"延遲在第 {firstSpike?.HopNumber ?? 0} 跳開始明顯上升，位置夠前段，較像接入 ISP 問題，而不是目標服務本身。",
@@ -91,9 +85,8 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioInternetTransitPath => new LocalizedAssessmentView(
                 overallStatus,
                 "公網 transit 路徑",
-                confidence,
-                "公網中段路徑出現延遲增加，因此速度變慢有可能發生在 ISP 與目標端之間。",
-                $"延遲在第 {firstSpike?.HopNumber ?? 0} 跳開始上升，位置落在接入邊界之後、目標之前，這比較像 transit 或上游路徑壅塞，而不是純本地問題。",
+                "這次結果顯示公網中段路徑有延遲增加，速度變慢可能發生在 ISP 與目標端之間。",
+                $"延遲在第 {firstSpike?.HopNumber ?? 0} 跳開始上升，位置落在接入邊界之後、目標之前，這比較接近 transit 或上游路徑壅塞，而不是純本地問題。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
                     "稍晚重跑一次，確認公網路徑異常是否持續存在。",
@@ -103,11 +96,10 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioCompanyNetworkOrDestinationService => new LocalizedAssessmentView(
                 overallStatus,
                 "公司網路或目標服務",
-                confidence,
-                "症狀出現在路徑後段，因此問題較可能靠近公司邊界或服務本身。",
+                "這次結果顯示症狀集中在路徑後段，問題可能靠近公司邊界或服務本身。",
                 failedTcp.Length > 0
                     ? "一個或多個目標服務埠失敗，但路由已經走到後段 hop，建議優先調查公司邊界、VPN listener 或目標服務。"
-                    : "整條路徑在前段都大致正常，異常集中在最後一段，因此公司邊界或目標主機是更可能的故障域。",
+                    : "整條路徑在前段都大致正常，異常集中在最後一段，因此公司邊界或目標主機仍是較可能的故障區段。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
                     "檢查 VPN gateway、remote desktop gateway、reverse proxy 或目標服務健康狀態。",
@@ -117,7 +109,6 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioNoClearNetworkFaultDetected => new LocalizedAssessmentView(
                 overallStatus,
                 "未偵測到明確網路故障",
-                confidence,
                 "這次檢測中的路由、DNS 與服務埠檢查目前都看起來健康。",
                 "這次執行沒有看到明顯的網路側問題。如果使用者仍然感覺緩慢，問題可能偏向應用程式本身、間歇性狀況，或端點負載。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
@@ -129,7 +120,6 @@ public static partial class SupportReportLocalizer
             _ => new LocalizedAssessmentView(
                 overallStatus,
                 severeLoss || finalHopIssue ? "需進一步確認" : "間歇性或資訊不足",
-                confidence,
                 "這次檢測有一些警訊，但還不足以直接指向單一故障域。",
                 "目前證據比較混合，代表值得持續追查，但還不夠支持直接判定為家用網路、ISP、公網 transit 或公司邊界問題。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
@@ -238,22 +228,6 @@ public static partial class SupportReportLocalizer
         };
     }
 
-    public static string TranslateConfidence(string confidence, string? language)
-    {
-        if (!ReportLanguage.IsTraditionalChinese(language))
-        {
-            return confidence;
-        }
-
-        return confidence switch
-        {
-            "High" => "高",
-            "Medium" => "中",
-            "Low" => "低",
-            _ => confidence
-        };
-    }
-
     public static string TranslateRouteStatus(string status, string? language)
     {
         if (!ReportLanguage.IsTraditionalChinese(language))
@@ -287,7 +261,12 @@ public static partial class SupportReportLocalizer
             "Generated" => zh ? "產生時間" : "Generated",
             "ExecutionId" => zh ? "執行 ID" : "Execution ID",
             "FaultDomain" => zh ? "故障域" : "Fault domain",
-            "Confidence" => zh ? "信心" : "Confidence",
+            "PossibleFaultDomain" => zh ? "可能故障區段" : "Possible fault domain",
+            "OverallFinding" => zh ? "總體觀察" : "Overall finding",
+            "Observations" => zh ? "觀察到的訊號" : "Observations",
+            "Interpretation" => zh ? "判讀" : "Interpretation",
+            "SuspiciousSignals" => zh ? "值得注意的訊號" : "Highlighted anomalies",
+            "NoSuspiciousSignals" => zh ? "這次執行沒有出現特別需要先注意的異常訊號。" : "No high-signal anomalies were highlighted in this run.",
             "ChecksOverview" => zh ? "檢查概覽" : "Checks overview",
             "DetailHint" => zh ? "完整細節請參考 HTML 報告、JSON 或 route-hops.csv。" : "For full detail, use the HTML report, JSON, or route-hops.csv.",
             "AverageLatency" => zh ? "平均延遲" : "Average latency",
@@ -485,7 +464,6 @@ public static partial class SupportReportLocalizer
 public readonly record struct LocalizedAssessmentView(
     string OverallStatusLabel,
     string FaultDomain,
-    string ConfidenceLabel,
     string UserSummary,
     string ItSummary,
     IReadOnlyList<string> EvidenceHighlights,
