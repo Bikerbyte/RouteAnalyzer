@@ -12,6 +12,8 @@ public sealed class SupportDiagnosticReport
 
     public required string RuntimeSummary { get; init; }
 
+    public required NetworkContextSnapshot NetworkContext { get; init; }
+
     public required DiagnosticProfile Profile { get; init; }
 
     public required DiagnosticAssessment Assessment { get; init; }

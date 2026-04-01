@@ -1,10 +1,13 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace RouteAnalyzer.Models;
 
 public sealed class DiagnosticProfile
 {
     public string ProfileName { get; init; } = "Remote Support";
 
-    public string? CompanyName { get; init; }
+    public string? DestinationName { get; init; }
 
     public string? Description { get; init; }
 
@@ -21,4 +24,7 @@ public sealed class DiagnosticProfile
     public IReadOnlyList<DnsLookupDefinition> DnsLookups { get; init; } = [];
 
     public IReadOnlyList<TcpEndpointDefinition> TcpEndpoints { get; init; } = [];
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtraProperties { get; init; }
 }

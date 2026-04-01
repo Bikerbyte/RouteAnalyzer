@@ -6,14 +6,15 @@ namespace RouteAnalyzer.Tests;
 public class SupportDiagnosticExportFormatterTests
 {
     [Fact]
-    public void ToHtml_ContainsUserAndItSections()
+    public void ToHtml_ContainsMinimalTriageSections()
     {
         var html = SupportDiagnosticExportFormatter.ToHtml(CreateReport());
 
-        Assert.Contains("User Summary", html);
-        Assert.Contains("IT Summary", html);
-        Assert.Contains("DNS checks", html);
-        Assert.Contains("TCP checks", html);
+        Assert.Contains("Recommended next action", html);
+        Assert.Contains("Highlighted anomalies", html);
+        Assert.Contains("Observations", html);
+        Assert.Contains("Route Summary", html);
+        Assert.Contains("Copy IT summary", html);
     }
 
     [Fact]
@@ -24,7 +25,8 @@ public class SupportDiagnosticExportFormatterTests
         Assert.Contains("data-switch-language=\"en\"", html);
         Assert.Contains("data-switch-language=\"zh-TW\"", html);
         Assert.Contains("class=\"lang-zh\"", html);
-        Assert.Contains("\u4F7F\u7528\u8005\u6458\u8981", html);
+        Assert.Contains("\u5EFA\u8B70\u4E0B\u4E00\u6B65", html);
+        Assert.Contains("\u503C\u5F97\u6CE8\u610F\u7684\u8A0A\u865F", html);
     }
 
     [Fact]
@@ -131,10 +133,17 @@ public class SupportDiagnosticExportFormatterTests
             DurationMs = 2200,
             MachineName = "CLIENT-01",
             RuntimeSummary = "Windows | .NET 10",
+            NetworkContext = new NetworkContextSnapshot
+            {
+                ConnectionType = "Wi-Fi",
+                ActiveAdapterName = "Intel Wi-Fi 6",
+                DefaultGateway = "192.168.1.1",
+                DnsServers = ["192.168.1.1", "1.1.1.1"]
+            },
             Profile = new DiagnosticProfile
             {
                 ProfileName = "Remote Support - VPN",
-                CompanyName = "Contoso",
+                DestinationName = "Contoso",
                 PreferredLanguage = preferredLanguage ?? ReportLanguage.English,
                 TargetHost = "vpn.example.com",
                 PingCount = 4,
@@ -162,7 +171,6 @@ public class SupportDiagnosticExportFormatterTests
                 ScenarioKey = DiagnosticAssessmentEngine.ScenarioNoClearNetworkFaultDetected,
                 OverallStatusLabel = "Healthy",
                 FaultDomain = "No clear network fault detected",
-                ConfidenceLabel = "Medium",
                 UserSummary = "The current network path looks healthy.",
                 ItSummary = "No strong network-side issue stands out in this run.",
                 EvidenceHighlights =

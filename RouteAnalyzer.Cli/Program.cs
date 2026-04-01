@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -13,6 +14,7 @@ internal static class CliApplication
 {
     public static async Task<int> RunAsync(string[] args)
     {
+        // Parse first so the main execution flow can stay linear and easy to scan.
         var parseResult = CliArguments.Parse(args);
         if (!parseResult.IsValid)
         {
@@ -28,6 +30,7 @@ internal static class CliApplication
 
         try
         {
+            // Func: create an editable sample profile for helpdesk rollout.
             if (parseResult.CreateSampleProfile)
             {
                 var samplePath = parseResult.SampleProfilePath
@@ -38,6 +41,7 @@ internal static class CliApplication
                 return 0;
             }
 
+            // Main diagnostic flow
             var options = new RouteAnalyzerOptions();
             var profileResolution = ResolveExecutionProfile(parseResult, options);
 
@@ -85,11 +89,14 @@ internal static class CliApplication
         var summary = BuildConsoleSummary(report);
         Console.WriteLine(summary);
 
+        // Console-only mode is for quick triage and skips file output completely.
         if (arguments.ConsoleOnly)
         {
             return;
         }
 
+        // Bundle mode is the default support workflow:
+        // keep the summary, HTML report, and raw artifacts together in one folder.
         if (!string.IsNullOrWhiteSpace(arguments.ReportDirectory) || string.Equals(arguments.Format, "bundle", StringComparison.OrdinalIgnoreCase))
         {
             var reportDirectory = arguments.ReportDirectory
@@ -99,10 +106,16 @@ internal static class CliApplication
             var bundle = SupportDiagnosticExportFormatter.WriteBundle(report, reportDirectory);
             Console.WriteLine();
             Console.WriteLine($"Report bundle saved to: {bundle.DirectoryPath}");
-            Console.WriteLine($"  summary : {bundle.SummaryPath}");
-            Console.WriteLine($"  json    : {bundle.JsonPath}");
-            Console.WriteLine($"  html    : {bundle.HtmlPath}");
-            Console.WriteLine($"  route   : {bundle.RouteCsvPath}");
+            Console.WriteLine($"Main report : {bundle.HtmlPath}");
+            Console.WriteLine($"Summary     : {bundle.SummaryPath}");
+            Console.WriteLine($"JSON        : {bundle.JsonPath}");
+            Console.WriteLine($"Route CSV   : {bundle.RouteCsvPath}");
+
+            if (!arguments.SuppressAutoOpen)
+            {
+                TryOpenPath(bundle.HtmlPath, "HTML report");
+            }
+
             return;
         }
 
@@ -119,6 +132,12 @@ internal static class CliApplication
             await File.WriteAllTextAsync(fullPath, output, Encoding.UTF8);
             Console.WriteLine();
             Console.WriteLine($"Report saved to: {fullPath}");
+
+            if (!arguments.SuppressAutoOpen && string.Equals(arguments.Format, "html", StringComparison.OrdinalIgnoreCase))
+            {
+                TryOpenPath(fullPath, "HTML report");
+            }
+
             return;
         }
 
@@ -146,8 +165,7 @@ internal static class CliApplication
         builder.AppendLine("Route Analyzer");
         builder.AppendLine("--------------");
         builder.AppendLine($"Status      : {report.Assessment.OverallStatusLabel}");
-        builder.AppendLine($"Fault       : {report.Assessment.FaultDomain}");
-        builder.AppendLine($"Confidence  : {report.Assessment.ConfidenceLabel}");
+        builder.AppendLine($"Possible    : {report.Assessment.FaultDomain}");
         builder.AppendLine($"Target      : {report.Profile.TargetHost}");
         builder.AppendLine($"Ping Avg    : {report.PrimaryRoute.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms");
         builder.AppendLine($"Packet Loss : {report.PrimaryRoute.PingSummary.PacketLossPercent}%");
@@ -155,6 +173,17 @@ internal static class CliApplication
         builder.AppendLine($"TCP         : {(report.TcpResults.Count == 0 ? "n/a" : $"{tcpPassed}/{report.TcpResults.Count} pass")}");
         builder.AppendLine();
         builder.AppendLine(report.Assessment.UserSummary);
+
+        var highlightedSignals = report.Assessment.EvidenceHighlights.Take(2).ToArray();
+        if (highlightedSignals.Length > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("Observations:");
+            foreach (var signal in highlightedSignals)
+            {
+                builder.AppendLine($"- {signal}");
+            }
+        }
 
         if (report.Assessment.Recommendations.Count > 0)
         {
@@ -184,6 +213,7 @@ internal static class CliApplication
 
         if (resolvedProfilePath is not null)
         {
+            // Profile-driven mode keeps DNS/TCP checks consistent across support cases.
             profile = DiagnosticProfileLoader.Load(resolvedProfilePath);
         }
         else
@@ -199,16 +229,8 @@ internal static class CliApplication
                 throw new DiagnosticProfileException("Target must be a valid hostname, IP address, or URL.");
             }
 
-            profile = new DiagnosticProfile
-            {
-                ProfileName = "Quick Diagnostic",
-                Description = "Ad hoc route diagnostic without a saved helpdesk profile.",
-                PreferredLanguage = arguments.Language ?? ReportLanguage.English,
-                TargetHost = normalizedTarget,
-                PingCount = arguments.PingCount ?? options.DefaultPingCount,
-                MaxHops = arguments.MaxHops ?? options.DefaultMaxHops,
-                IncludeGeoDetails = arguments.IncludeGeoDetails ?? options.DefaultIncludeGeoDetails
-            };
+            // Fall back to ad hoc mode for quick one-off diagnostics.
+            profile = BuildQuickDiagnosticProfile(arguments, options, normalizedTarget);
         }
 
         var overriddenTarget = profile.TargetHost;
@@ -223,7 +245,7 @@ internal static class CliApplication
         var mergedProfile = new DiagnosticProfile
         {
             ProfileName = profile.ProfileName,
-            CompanyName = profile.CompanyName,
+            DestinationName = profile.DestinationName,
             Description = profile.Description,
             PreferredLanguage = arguments.Language ?? profile.PreferredLanguage,
             TargetHost = overriddenTarget,
@@ -235,6 +257,23 @@ internal static class CliApplication
         };
 
         return new ProfileResolution(DiagnosticProfileLoader.Normalize(mergedProfile), resolvedProfilePath);
+    }
+
+    private static DiagnosticProfile BuildQuickDiagnosticProfile(
+        CliArguments arguments,
+        RouteAnalyzerOptions options,
+        string normalizedTarget)
+    {
+        return new DiagnosticProfile
+        {
+            ProfileName = "Quick Diagnostic",
+            Description = "Ad hoc route diagnostic without a saved helpdesk profile.",
+            PreferredLanguage = arguments.Language ?? ReportLanguage.English,
+            TargetHost = normalizedTarget,
+            PingCount = arguments.PingCount ?? options.DefaultPingCount,
+            MaxHops = arguments.MaxHops ?? options.DefaultMaxHops,
+            IncludeGeoDetails = arguments.IncludeGeoDetails ?? options.DefaultIncludeGeoDetails
+        };
     }
 
     private static void PrintHelp()
@@ -265,7 +304,26 @@ internal static class CliApplication
         Console.WriteLine("                                Write an editable sample profile JSON.");
         Console.WriteLine("  --force                       Allow overwriting when creating a sample profile.");
         Console.WriteLine("  --no-geo                      Disable geo enrichment.");
+        Console.WriteLine("  --no-open                     Do not auto-open the generated HTML report.");
         Console.WriteLine("  --help                        Show this help.");
+    }
+
+    private static void TryOpenPath(string path, string label)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
+
+            Console.WriteLine($"Opened {label}: {path}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Could not auto-open {label}: {ex.Message}");
+        }
     }
 
     private sealed record ProfileResolution(DiagnosticProfile Profile, string? ProfilePath);
@@ -305,6 +363,8 @@ internal sealed class CliArguments
 
     public bool Force { get; private init; }
 
+    public bool SuppressAutoOpen { get; private init; }
+
     public static CliArguments Parse(string[] args)
     {
         if (args.Length == 0)
@@ -328,7 +388,9 @@ internal sealed class CliArguments
         var createSampleProfile = false;
         var consoleOnly = false;
         var force = false;
+        var suppressAutoOpen = false;
 
+        // Keep parsing explicit and predictable for future tweaks.
         for (var index = 0; index < args.Length; index++)
         {
             var token = args[index];
@@ -431,6 +493,10 @@ internal sealed class CliArguments
                     includeGeoDetails = false;
                     break;
 
+                case "--no-open":
+                    suppressAutoOpen = true;
+                    break;
+
                 default:
                     if (IsSwitch(token))
                     {
@@ -467,7 +533,8 @@ internal sealed class CliArguments
             Language = language,
             CreateSampleProfile = createSampleProfile,
             SampleProfilePath = sampleProfilePath,
-            Force = force
+            Force = force,
+            SuppressAutoOpen = suppressAutoOpen
         };
     }
 

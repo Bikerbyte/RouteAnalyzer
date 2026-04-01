@@ -6,6 +6,7 @@ namespace RouteAnalyzer.Services;
 
 public static class DiagnosticProfileLoader
 {
+    // Keep the default file name stable so support can drop the EXE and profile together.
     public const string DefaultFileName = "routeanalyzer.profile.json";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -16,6 +17,8 @@ public static class DiagnosticProfileLoader
 
     public static string? TryFindDefaultProfilePath(IEnumerable<string>? searchRoots = null)
     {
+        // Search current working directory first, then next to the EXE.
+        // That makes local testing and published usage behave the same way.
         var roots = searchRoots?.ToArray()
             ?? [Directory.GetCurrentDirectory(), AppContext.BaseDirectory];
 
@@ -51,6 +54,8 @@ public static class DiagnosticProfileLoader
 
     public static void WriteSampleProfile(string path, bool overwrite = false)
     {
+        // Sample profile generation is mainly for first-time setup,
+        // so create the folder if needed and fail clearly on accidental overwrite.
         var fullPath = Path.GetFullPath(path);
         if (File.Exists(fullPath) && !overwrite)
         {
@@ -68,10 +73,11 @@ public static class DiagnosticProfileLoader
 
     public static DiagnosticProfile CreateSampleProfile()
     {
+        // Keep the sample profile realistic enough that a support team can edit and adopt it quickly.
         return new DiagnosticProfile
         {
             ProfileName = "Remote Support - VPN",
-            CompanyName = "Contoso",
+            DestinationName = "Contoso",
             Description = "One-click remote access checks for users who report slow VPN or remote desktop sessions.",
             PreferredLanguage = ReportLanguage.English,
             TargetHost = "vpn.example.com",
@@ -111,6 +117,7 @@ public static class DiagnosticProfileLoader
 
     public static DiagnosticProfile Normalize(DiagnosticProfile profile)
     {
+        // Normalize once at load time so the rest of the pipeline can assume clean values.
         if (!TargetHostParser.TryNormalize(profile.TargetHost, out var normalizedTarget))
         {
             throw new DiagnosticProfileException("Profile targetHost must be a valid hostname, IP address, or URL.");
@@ -126,6 +133,7 @@ public static class DiagnosticProfileLoader
             throw new DiagnosticProfileException($"Profile maxHops must be between {RouteAnalyzerOptions.MinMaxHops} and {RouteAnalyzerOptions.MaxMaxHops}.");
         }
 
+        // DNS and TCP entries are normalized separately so validation errors stay specific.
         var normalizedDnsLookups = profile.DnsLookups.Select(static lookup =>
         {
             if (!TargetHostParser.TryNormalize(lookup.Hostname, out var normalizedHostname))
@@ -164,7 +172,7 @@ public static class DiagnosticProfileLoader
         return new DiagnosticProfile
         {
             ProfileName = string.IsNullOrWhiteSpace(profile.ProfileName) ? "Remote Support" : profile.ProfileName.Trim(),
-            CompanyName = profile.CompanyName?.Trim(),
+            DestinationName = GetDestinationName(profile),
             Description = profile.Description?.Trim(),
             PreferredLanguage = ReportLanguage.Normalize(profile.PreferredLanguage),
             TargetHost = normalizedTarget,
@@ -174,6 +182,24 @@ public static class DiagnosticProfileLoader
             DnsLookups = normalizedDnsLookups,
             TcpEndpoints = normalizedTcpEndpoints
         };
+    }
+
+    private static string? GetDestinationName(DiagnosticProfile profile)
+    {
+        var destinationName = profile.DestinationName?.Trim();
+        if (!string.IsNullOrWhiteSpace(destinationName))
+        {
+            return destinationName;
+        }
+
+        if (profile.ExtraProperties is not null
+            && profile.ExtraProperties.TryGetValue("companyName", out var legacyValue)
+            && legacyValue.ValueKind == JsonValueKind.String)
+        {
+            return legacyValue.GetString()?.Trim();
+        }
+
+        return null;
     }
 }
 

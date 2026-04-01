@@ -1,102 +1,87 @@
 # Route Analyzer
 
-Route Analyzer is a client-side network diagnostics EXE for helpdesk and remote support workflows.
-It is designed for the situation where a user says "remote access is slow" and IT needs evidence that separates local Wi-Fi, ISP, transit, DNS, and company-side service problems.
+一個 client-side 網路狀態診斷工具。
 
-## What It Does
+目標不是取代完整監控或 APM，而是讓 user 回報「連線很慢」「VPN 很卡」「網站連不上」時，能在 client-side 快速收一份診斷報告。
 
-- Runs on the affected machine, not just on the server side
-- Supports a reusable helpdesk profile with fixed DNS and TCP checks
-- Runs:
-  - ICMP ping
-  - traceroute / tracert
-  - DNS lookups
-  - TCP connectivity checks
-- Produces:
-  - a user-friendly summary
-  - an IT-focused summary
-  - a full report bundle with `summary.txt`, `report.json`, `report.html`, and `route-hops.csv`
-  - bilingual report output with English / Traditional Chinese switching in HTML
-- Adds automatic fault-domain hints such as:
-  - local network or Wi-Fi
-  - ISP / access network
-  - public transit path
-  - company edge or destination service
-  - DNS or initial connectivity
+## Demo
 
-## Solution Shape
+![Route Analyzer report demo](docs/images/report-demo.png)
 
-- `RouteAnalyzer.Core`
-  - Diagnostics engine, profile loader, attribution logic, and report exporters
-- `RouteAnalyzer.Cli`
-  - EXE entry point for support staff or end users
-- `RouteAnalyzer.Tests`
-  - Unit tests for parsing, attribution, and report generation
 
-## Profile-Driven Mode
+輸出 summary：
 
-The intended helpdesk workflow is profile-driven.
-A profile defines the main target plus any DNS or TCP checks that should always run for your environment.
+- 整體狀態
+- 可能的 fault domain
+- 下一步建議
+- DNS / TCP / route 訊號
+- 可展之完整 traceroute 與明細
 
-Example profile file: `routeanalyzer.profile.example.json`
+## 快速開始
 
-The CLI also knows how to generate one:
+如果目前目錄或 EXE 同層有 `routeanalyzer.profile.json`，直接執行就會使用該 profile：
 
 ```powershell
-dotnet run --project RouteAnalyzer.Cli -- --create-sample-profile
+RouteAnalyzer.Cli.exe
 ```
 
-If a file named `routeanalyzer.profile.json` exists in the current directory or next to the EXE, running the EXE without arguments will use it automatically.
-
-## Quick Start
-
-Run with a helpdesk profile:
+用指定 profile 執行：
 
 ```powershell
 dotnet run --project RouteAnalyzer.Cli -- --profile-file .\routeanalyzer.profile.json
 ```
 
-Run an ad hoc quick diagnostic:
+臨時測一個目標：
 
 ```powershell
 dotnet run --project RouteAnalyzer.Cli -- --target vpn.example.com
 ```
 
-Generate only console output:
+只要 console，不自動開報表：
 
 ```powershell
-dotnet run --project RouteAnalyzer.Cli -- --target 127.0.0.1 --console-only --format text
+dotnet run --project RouteAnalyzer.Cli -- --target vpn.example.com --console-only --no-open
 ```
 
-Write the full report bundle to a specific directory:
+產生一份 sample profile：
 
 ```powershell
-dotnet run --project RouteAnalyzer.Cli -- --profile-file .\routeanalyzer.profile.json --report-dir .\reports\case-001
+dotnet run --project RouteAnalyzer.Cli -- --create-sample-profile
 ```
 
-## Output Bundle
+## Profile 概念
 
-By default, the CLI writes a bundle under `.\reports\<timestamp-target>\`.
+這個工具比較適合 profile-driven 的使用方式。
 
-Bundle contents:
+你可以把固定要檢查的目標、DNS lookup、TCP port 都寫進 profile，之後 helpdesk 或使用者只要跑一次，就能得到比較一致的報告。
+
+範例檔案：[`routeanalyzer.profile.example.json`](/e:/Biker/Code/RouteAnalyzer/routeanalyzer.profile.example.json)
+
+目前 profile 會用到這幾個核心欄位：
+
+- `profileName`
+- `destinationName`
+- `targetHost`
+- `dnsLookups`
+- `tcpEndpoints`
+
+## 會產出什麼
+
+每次執行預設會產生一個報告資料夾，並自動開啟 `report.html`。
+
+內容包含：
 
 - `summary.txt`
+  - 短摘要
 - `report.json`
+  - 後續分析或程式處理使用
 - `report.html`
+  - 直觀閱讀使用
 - `route-hops.csv`
+  - network hop 明細
 
-The HTML report contains:
 
-- traffic-light style overall status
-- English / Traditional Chinese toggle
-- user summary
-- IT summary
-- DNS check table
-- TCP check table
-- route hop table
-- raw traceroute output
-
-## CLI Options
+## CLI 參數
 
 - `--profile-file <path>`
 - `--target <value>`
@@ -110,25 +95,22 @@ The HTML report contains:
 - `--create-sample-profile [path]`
 - `--force`
 - `--no-geo`
+- `--no-open`
 - `--help`
 
-## Publish EXE
+## Build / Publish
 
-```powershell
-./scripts/publish-cli.ps1 -Runtime win-x64 -Configuration Release
-```
-
-Artifacts are written to `artifacts/cli/<runtime>`.
-
-## Verification
+本機驗證：
 
 ```powershell
 dotnet build RouteAnalyzer.sln
 dotnet test RouteAnalyzer.sln
 ```
 
-## Current Limitations
+輸出 Windows EXE：
 
-- `tracert` / `traceroute` must exist on the host
-- Geo enrichment depends on `ipwho.is`
-- The tool is still point-in-time diagnostics, not continuous monitoring
+```powershell
+./scripts/publish-cli.ps1 -Runtime win-x64 -Configuration Release
+```
+
+prodution menu : `artifacts/cli/<runtime>`。
