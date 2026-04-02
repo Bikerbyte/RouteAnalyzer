@@ -37,18 +37,18 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioLocalDnsOrInitialConnectivity => new LocalizedAssessmentView(
                 overallStatus,
                 "本機 DNS 或起始連線",
-                "這次結果比較像是本機 DNS 或前段連線異常，流量還沒到目的端前就已經失敗。",
+                "結果像是本機 DNS 或前段連線異常，流量還沒到目的端前就已經失敗。",
                 "所有設定的 DNS 查詢都失敗，而且路由測試沒有收到 ICMP 回應。這更接近本機解析器異常、網際網路未連線，或 VPN 尚未完成前置連線的情況。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
-                    "重新連上目前的網路，或切換到另一個網路後再試一次。",
+                    "請重新連目前的網路，或切換到另一個網路後再試一次。",
                     "如果所有目的地都受影響，請重新啟動 Wi-Fi 或家用路由器。",
                     "如果此環境需要 VPN 才能解析內部名稱，請確認 VPN 用戶端已正確連線。"
                 ]),
             DiagnosticAssessmentEngine.ScenarioCompanyEdgeServiceTcpFailure => new LocalizedAssessmentView(
                 overallStatus,
                 "目的端邊界或目標服務",
-                "這次結果顯示到目的端的路徑大致可達，但目標服務埠仍未接受連線。",
+                "結果顯示到目的端的路徑大致可達，但目標服務埠仍未接受連線。",
                 "路由品質看起來健康，且 DNS 解析成功，但所有設定的 TCP 端點都失敗。這種型態比較接近服務監聽、防火牆、VPN gateway 或目的端邊界設備的問題，而不是使用者家中網路。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
@@ -59,20 +59,20 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioLocalNetworkOrWifi => new LocalizedAssessmentView(
                 overallStatus,
                 "本地網路或 Wi-Fi",
-                "這次結果比較像是在非常靠近這台裝置的位置開始出現問題，常見於 Wi-Fi 品質、家用路由器或本地網路。",
+                "結果顯示在非常靠近這台裝置的節點便出現問題，常見於 Wi-Fi 品質、路由器的 Proxy 和防火牆設定。",
                 firstHopIssue is not null
                     ? $"第一跳就出現異常，發生在第 {firstHopIssue.HopNumber} 跳（{GetHopScopeLabel(firstHopIssue, ReportLanguage.TraditionalChinese)}）。再加上封包遺失 {route.PingSummary.PacketLossPercent}% ，目前比較接近使用者端 LAN 或 gateway。"
                     : $"目前封包遺失為 {route.PingSummary.PacketLossPercent}% ，而且沒有更明確的下游訊號，建議先從本地接入網路開始確認。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
-                    "請使用者靠近路由器重試；如果可行，優先改用有線網路。",
+                    "請優先改用有線網路，並檢查路由器的 Proxy 和防火牆設定。",
                     "請使用者重新連接 Wi-Fi，或重新啟動家用路由器。",
                     "如果可以，改用手機熱點再跑一次，以切開家用網路因素。"
                 ]),
             DiagnosticAssessmentEngine.ScenarioIspOrAccessNetwork => new LocalizedAssessmentView(
                 overallStatus,
                 "ISP 或接入網路",
-                "這次結果顯示路徑在前幾跳就開始不穩定，較像 ISP 側或接入網路。",
+                "結果顯示路徑在前幾跳就開始不穩定，較像 ISP 側或接入網路。",
                 accessHopIssue is not null
                     ? $"異常訊號在第 {accessHopIssue.HopNumber} 跳（{GetHopScopeLabel(accessHopIssue, ReportLanguage.TraditionalChinese)}）就出現，問題較可能位在使用者 gateway 與 ISP 接入邊界之間。"
                     : $"延遲在第 {firstSpike?.HopNumber ?? 0} 跳開始明顯上升，位置夠前段，較像接入 ISP 問題，而不是目標服務本身。",
@@ -85,7 +85,7 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioInternetTransitPath => new LocalizedAssessmentView(
                 overallStatus,
                 "公網 transit 路徑",
-                "這次結果顯示公網中段路徑有延遲增加，速度變慢可能發生在 ISP 與目的端之間。",
+                "結果顯示公網中段路徑有延遲增加，速度變慢可能發生在 ISP 與目的端之間。",
                 $"延遲在第 {firstSpike?.HopNumber ?? 0} 跳開始上升，位置落在接入邊界之後、目標之前，這比較接近 transit 或上游路徑壅塞，而不是純本地問題。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
@@ -96,7 +96,7 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioCompanyNetworkOrDestinationService => new LocalizedAssessmentView(
                 overallStatus,
                 "目的端網路或目標服務",
-                "這次結果顯示症狀集中在路徑後段，問題可能靠近目的端邊界或服務本身。",
+                "結果顯示症狀集中在路徑後段，問題可能靠近目的端邊界或服務本身。",
                 failedTcp.Length > 0
                     ? "一個或多個目標服務埠失敗，但路由已經走到後段 hop，建議優先調查目的端邊界、VPN listener 或目標服務。"
                     : "整條路徑在前段都大致正常，異常集中在最後一段，因此目的端邊界或目標主機仍是較可能的故障區段。",
@@ -109,8 +109,8 @@ public static partial class SupportReportLocalizer
             DiagnosticAssessmentEngine.ScenarioNoClearNetworkFaultDetected => new LocalizedAssessmentView(
                 overallStatus,
                 "未偵測到明確網路故障",
-                "這次檢測中的路由、DNS 與服務埠檢查目前都看起來健康。",
-                "這次執行沒有看到明顯的網路側問題。如果使用者仍然感覺緩慢，問題可能偏向應用程式本身、間歇性狀況，或端點負載。",
+                "檢測中的路由、DNS 與服務埠檢查目前都看起來健康。",
+                "執行結果沒有看到明顯的網路側問題。如果使用者仍然感覺緩慢，問題可能偏向應用程式本身、間歇性狀況，或端點負載。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
                     "如果問題再次出現，請再收一次報告。",
@@ -120,8 +120,8 @@ public static partial class SupportReportLocalizer
             _ => new LocalizedAssessmentView(
                 overallStatus,
                 severeLoss || finalHopIssue ? "需進一步確認" : "間歇性或資訊不足",
-                "這次檢測有一些警訊，但還不足以直接指向單一故障域。",
-                "目前證據比較混合，代表值得持續追查，但還不夠支持直接判定為家用網路、ISP、公網 transit 或目的端邊界問題。",
+                "檢測結果有一些警訊，但還不足以直接指向單一故障域。",
+                "沒有明確異常訊號，但無法直接判定是家用網路、ISP、公網 transit 或目的端邊界問題。",
                 BuildEvidence(report, ReportLanguage.TraditionalChinese),
                 [
                     "建議在問題實際發生時再收一次報告。",
