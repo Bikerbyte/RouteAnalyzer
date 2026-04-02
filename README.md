@@ -5,8 +5,10 @@
 
 ## Demo
 - 成功範例
-![Route Analyzer report demo](docs/images/report-demo.png)
+<img width="736" height="514" alt="Screenshot 2026-04-02 193121" src="https://github.com/user-attachments/assets/8fcffdff-eafc-4abe-bd26-5b8e80d75932" />
+<img width="638" height="576" alt="Screenshot 2026-04-02 193246" src="https://github.com/user-attachments/assets/1f3811b2-5905-4f77-b977-3dcbc0902bf0" />
 
+<br/><br/>
 - 異常範例
 <img width="1417" height="878" alt="image" src="https://github.com/user-attachments/assets/52d3dcec-0be0-4d95-a5c4-9fe43c8279c0" />
 
@@ -19,7 +21,7 @@
 - DNS / TCP / route 訊號
 - 可展之完整 traceroute 與明細
 
-## 快速開始
+## Guide
 
 若當前目錄或 EXE 同層有 `routeanalyzer.profile.json`，直接執行便會直接使用該 profile：
 
