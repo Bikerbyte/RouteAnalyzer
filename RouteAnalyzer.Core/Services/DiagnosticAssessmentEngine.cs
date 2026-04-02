@@ -96,13 +96,13 @@ public static class DiagnosticAssessmentEngine
             scenarioKey = ScenarioLocalNetworkOrWifi;
             overallStatus = "Action Needed";
             faultDomain = "Local network or Wi-Fi";
-            userSummary = "This run suggests the issue starts very close to the device, which is often consistent with Wi-Fi quality, the local router, or the home network.";
+            userSummary = "This run suggests the issue starts very close to the device, which is often consistent with Wi-Fi quality, the router's proxy and firewall settings.";
             itSummary = firstHopIssue is not null
                 ? $"The first hop already shows degradation at hop {firstHopIssue.HopNumber} ({firstHopIssue.ScopeLabel}). Combined with packet loss {route.PingSummary.PacketLossPercent}%, this is more consistent with the user's LAN or gateway."
                 : $"Packet loss is {route.PingSummary.PacketLossPercent}% with no stronger downstream signal. The local access network is still the first place to verify.";
             recommendations =
             [
-                "Ask the user to retry closer to the router or on wired ethernet if possible.",
+                "Try to use wired ethernet if possible, and check proxy or firewall settings.",
                 "Have the user restart the home router or reconnect Wi-Fi.",
                 "If available, compare the same test from a mobile hotspot to isolate the home network."
             ];
