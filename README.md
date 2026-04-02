@@ -1,12 +1,14 @@
 # Route Analyzer
 
 一個 client-side 網路狀態診斷工具。
-
-目標不是取代完整監控或 APM，而是讓 user 回報「連線很慢」「VPN 很卡」「網站連不上」時，能在 client-side 快速收一份診斷報告。
+當 user 回報「連線很慢」「VPN 很卡」「網站連不上」時，能在 client-side 快速收一份診斷報告。
 
 ## Demo
-
+- 成功範例
 ![Route Analyzer report demo](docs/images/report-demo.png)
+
+- 異常範例
+<img width="1417" height="878" alt="image" src="https://github.com/user-attachments/assets/52d3dcec-0be0-4d95-a5c4-9fe43c8279c0" />
 
 
 輸出 summary：
@@ -19,7 +21,7 @@
 
 ## 快速開始
 
-如果目前目錄或 EXE 同層有 `routeanalyzer.profile.json`，直接執行就會使用該 profile：
+若當前目錄或 EXE 同層有 `routeanalyzer.profile.json`，直接執行便會直接使用該 profile：
 
 ```powershell
 RouteAnalyzer.Cli.exe
@@ -31,29 +33,29 @@ RouteAnalyzer.Cli.exe
 dotnet run --project RouteAnalyzer.Cli -- --profile-file .\routeanalyzer.profile.json
 ```
 
-臨時測一個目標：
+測試指定 URL：
 
 ```powershell
 dotnet run --project RouteAnalyzer.Cli -- --target vpn.example.com
 ```
 
-只要 console，不自動開報表：
+Console only，不自動開報表：
 
 ```powershell
 dotnet run --project RouteAnalyzer.Cli -- --target vpn.example.com --console-only --no-open
 ```
 
-產生一份 sample profile：
+產生 sample profile：
 
 ```powershell
 dotnet run --project RouteAnalyzer.Cli -- --create-sample-profile
 ```
 
-## Profile 概念
+## Profile 設定檔
 
-這個工具比較適合 profile-driven 的使用方式。
+這個工具目前為 profile-driven。
 
-你可以把固定要檢查的目標、DNS lookup、TCP port 都寫進 profile，之後 helpdesk 或使用者只要跑一次，就能得到比較一致的報告。
+需將固定要檢查的目標、DNS lookup、TCP port 都寫進 profile，之後便可連同 profile 與執行檔一同提供給 user 運行。
 
 範例檔案：[`routeanalyzer.profile.example.json`](/e:/Biker/Code/RouteAnalyzer/routeanalyzer.profile.example.json)
 
@@ -65,7 +67,7 @@ dotnet run --project RouteAnalyzer.Cli -- --create-sample-profile
 - `dnsLookups`
 - `tcpEndpoints`
 
-## 會產出什麼
+## 產出結果
 
 每次執行預設會產生一個報告資料夾，並自動開啟 `report.html`。
 
