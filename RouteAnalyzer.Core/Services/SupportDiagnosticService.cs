@@ -34,7 +34,7 @@ public sealed class SupportDiagnosticService
 
         _logger.LogInformation("Starting support diagnostic for profile {ProfileName} targeting {TargetHost}", profile.ProfileName, profile.TargetHost);
 
-        // 主路徑、DNS、TCP 併行執行，讓整體報告時間控制在 helpdesk 可接受範圍。
+        // 主路徑、DNS、TCP 併行跑，整體時間才壓得在 helpdesk 能接受的範圍。
         var routeTask = _routeDiagnosticService.AnalyzeAsync(BuildRouteRequest(profile), cancellationToken);
 
         var dnsTask = RunDnsLookupsAsync(profile.DnsLookups, cancellationToken);

@@ -6,7 +6,7 @@ public static class DiagnosticAssessmentEngine
 {
     private const string TimeoutOnlyInconclusiveIssue = "One or more hops timed out, but timeout-only signals are inconclusive";
 
-    // Scenario keys are kept stable so reports and tests can rely on them.
+    // 這些 scenario key 先維持穩定，報表和測試都會直接吃。
     public const string ScenarioLocalDnsOrInitialConnectivity = "local-dns-or-initial-connectivity";
     public const string ScenarioCompanyEdgeServiceTcpFailure = "company-edge-service-tcp-failure";
     public const string ScenarioLocalNetworkOrWifi = "local-network-or-wifi";
@@ -22,7 +22,7 @@ public static class DiagnosticAssessmentEngine
         IReadOnlyList<DnsLookupResult> dnsResults,
         IReadOnlyList<TcpEndpointResult> tcpResults)
     {
-        // Build a small set of reusable signals first so the attribution rules below stay readable.
+        // 先把後面會重複用到的訊號整理出來，下面的判斷才不會越看越亂。
         var failedDns = dnsResults.Where(static result => !result.Success).ToArray();
         var failedTcp = tcpResults.Where(static result => !result.Success).ToArray();
         var firstSpike = route.Hops.FirstOrDefault(static hop => hop.SuspectedSpike);
@@ -45,7 +45,7 @@ public static class DiagnosticAssessmentEngine
         string scenarioKey;
         List<string> recommendations;
 
-        // Rule block: fail early when the device cannot even resolve or start the route.
+        // 連解析都失敗、路也起不來時，先往本機 DNS 或前段連線看。
         if (dnsResults.Count > 0 && failedDns.Length == dnsResults.Count && route.PingSummary.Received == 0)
         {
             scenarioKey = ScenarioLocalDnsOrInitialConnectivity;
@@ -60,7 +60,7 @@ public static class DiagnosticAssessmentEngine
                 "If the device is on VPN-required DNS, confirm the VPN client is running correctly."
             ];
         }
-        // Rule block: route is reachable, but the service edge itself is not accepting traffic.
+        // 路徑大致可達，但服務埠全失敗時，先懷疑目的端邊界或服務本身。
         else if (tcpResults.Count > 0 && failedTcp.Length == tcpResults.Count && routeHealthy && failedDns.Length == 0)
         {
             scenarioKey = ScenarioCompanyEdgeServiceTcpFailure;
@@ -75,7 +75,7 @@ public static class DiagnosticAssessmentEngine
                 "Review server-side logs for refused or timed-out connections at the reported time."
             ];
         }
-        // Rule block: timeout-only traceroute noise should not outweigh otherwise healthy checks.
+        // 只有 timeout 雜訊、其他檢查都正常時，不要過度放大成網路故障。
         else if (timeoutOnlyObservation && failedDns.Length == 0 && failedTcp.Length == 0)
         {
             scenarioKey = ScenarioNoClearNetworkFaultDetected;
@@ -90,7 +90,7 @@ public static class DiagnosticAssessmentEngine
                 "If the user still feels slowness, check application-side or endpoint-side evidence next."
             ];
         }
-        // Rule block: the first clear degradation is close to the user device or gateway.
+        // 明顯異常一開始就貼近使用者端時，先看本地網路或 gateway。
         else if (firstHopIssue is not null || severeLoss)
         {
             scenarioKey = ScenarioLocalNetworkOrWifi;
@@ -107,7 +107,7 @@ public static class DiagnosticAssessmentEngine
                 "If available, compare the same test from a mobile hotspot to isolate the home network."
             ];
         }
-        // Rule block: the path goes bad early, but not right on the device.
+        // 問題很前段就出現，但不是卡在第一跳時，優先往 ISP / access network 看。
         else if (accessHopIssue is not null || (firstSpike is not null && firstSpike.HopNumber <= 2))
         {
             scenarioKey = ScenarioIspOrAccessNetwork;
@@ -124,7 +124,7 @@ public static class DiagnosticAssessmentEngine
                 "Capture one or two repeat runs at different times to check whether the issue is bursty or sustained."
             ];
         }
-        // Rule block: public transit looks suspicious before the destination segment.
+        // 延遲是在公網中段拉上來時，比較像 transit 路徑問題。
         else if (firstSpike is not null && firstSpike.HopNumber < Math.Max(route.Hops.Count - 1, 3))
         {
             scenarioKey = ScenarioInternetTransitPath;
@@ -139,7 +139,7 @@ public static class DiagnosticAssessmentEngine
                 "If business impact is high, collect multiple reports and escalate with the ISP or upstream provider."
             ];
         }
-        // Rule block: later hops or service probes point to the destination side.
+        // 後段 hop 或服務探測才開始出現異常時，先查目的端那一側。
         else if (finalHopIssue || failedTcp.Length > 0)
         {
             scenarioKey = ScenarioCompanyNetworkOrDestinationService;
@@ -156,7 +156,7 @@ public static class DiagnosticAssessmentEngine
                 "Correlate with server-side monitoring and logs for the same time window."
             ];
         }
-        // Rule block: all current checks look healthy, so avoid over-claiming a network fault.
+        // 目前檢查都健康時，先不要硬判成網路側故障。
         else if (routeHealthy && failedDns.Length == 0 && failedTcp.Length == 0)
         {
             scenarioKey = ScenarioNoClearNetworkFaultDetected;
@@ -171,7 +171,7 @@ public static class DiagnosticAssessmentEngine
                 "Compare this result with another run from the same device on a different network."
             ];
         }
-        // Fallback: keep the message useful even when the evidence is mixed.
+        // 訊號混在一起時，至少保留一個還有判讀價值的結論。
         else
         {
             scenarioKey = ScenarioIntermittentOrInconclusive;
@@ -209,8 +209,8 @@ public static class DiagnosticAssessmentEngine
         IReadOnlyList<DnsLookupResult> dnsResults,
         IReadOnlyList<TcpEndpointResult> tcpResults)
     {
-        // Keep evidence short and support-oriented:
-        // enough to explain the result without turning the summary into raw telemetry.
+        // evidence 先維持精簡、偏 support 看的語氣。
+        // 要能交代判斷依據，但不要把 summary 寫成原始遙測 dump。
         var evidence = new List<string>
         {
             $"Ping success rate observed: {route.PingSummary.SuccessRatePercent}% with average latency {(route.PingSummary.AverageRoundTripMs?.ToString() ?? "-")} ms."

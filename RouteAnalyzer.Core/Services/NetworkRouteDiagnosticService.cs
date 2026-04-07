@@ -165,7 +165,7 @@ public partial class NetworkRouteDiagnosticService
             }
             catch
             {
-                // Keep the diagnostic flow forgiving. Failures count toward packet loss.
+                // 這裡先不要直接中斷，失敗就算進 packet loss 繼續往下收。
             }
         }
 
@@ -689,7 +689,7 @@ public partial class NetworkRouteDiagnosticService
         }
         catch
         {
-            // Ignore best-effort cleanup failures.
+            // 這種收尾失敗先忽略，不要反過來蓋掉原本的診斷結果。
         }
     }
 

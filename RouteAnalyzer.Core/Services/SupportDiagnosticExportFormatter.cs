@@ -8,7 +8,7 @@ namespace RouteAnalyzer.Services;
 
 public static class SupportDiagnosticExportFormatter
 {
-    // Summary sections stay intentionally short so the first screen is still usable.
+    // summary 區塊刻意壓短，第一眼先看重點比較有用。
     private const int MaxSummaryEvidenceItems = 4;
     private const int MaxSummaryRecommendationItems = 3;
     private const int MaxSummarySignalItems = 4;
@@ -27,7 +27,7 @@ public static class SupportDiagnosticExportFormatter
 
     public static string ToText(SupportDiagnosticReport report)
     {
-        // summary.txt is meant to be a quick handoff artifact, not the full raw dump.
+        // summary.txt 是拿來快速轉交的，不是完整 raw dump。
         var language = ReportLanguage.Normalize(report.Profile.PreferredLanguage);
         var assessment = SupportReportLocalizer.GetAssessmentView(report, language);
         var route = SupportReportLocalizer.GetRouteView(report.PrimaryRoute, language);
@@ -120,7 +120,7 @@ public static class SupportDiagnosticExportFormatter
 
     public static ReportArtifactBundle WriteBundle(SupportDiagnosticReport report, string directoryPath)
     {
-        // Keep the bundle predictable so support can zip or forward it without extra cleanup.
+        // bundle 結構盡量固定，support 要壓縮或轉寄都不用再整理。
         var fullDirectoryPath = Path.GetFullPath(directoryPath);
         Directory.CreateDirectory(fullDirectoryPath);
 
@@ -252,7 +252,7 @@ public static class SupportDiagnosticExportFormatter
 
     private static bool IsRouteDetailWorthOpening(SupportDiagnosticReport report)
     {
-        // Auto-expand route detail only when it is likely to explain the current result.
+        // 只有 route detail 真的有助於說明這次結果時，才預設展開。
         return !string.Equals(report.Assessment.OverallStatusLabel, "Healthy", StringComparison.OrdinalIgnoreCase)
             || report.PrimaryRoute.PingSummary.PacketLossPercent > 0
             || report.PrimaryRoute.Hops.Any(static hop => hop.SuspectedSpike || hop.IsTimeout);

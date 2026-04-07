@@ -14,7 +14,7 @@ internal static class CliApplication
 {
     public static async Task<int> RunAsync(string[] args)
     {
-        // Parse first so the main execution flow can stay linear and easy to scan.
+        // 先做參數解析，主流程就能維持直線往下看。
         var parseResult = CliArguments.Parse(args);
         if (!parseResult.IsValid)
         {
@@ -30,7 +30,7 @@ internal static class CliApplication
 
         try
         {
-            // Func: create an editable sample profile for helpdesk rollout.
+            // 先產一份可直接給 helpdesk 改的 sample profile。
             if (parseResult.CreateSampleProfile)
             {
                 var samplePath = parseResult.SampleProfilePath
@@ -41,7 +41,7 @@ internal static class CliApplication
                 return 0;
             }
 
-            // Main diagnostic flow
+            // 主診斷流程
             var options = new RouteAnalyzerOptions();
             var profileResolution = ResolveExecutionProfile(parseResult, options);
 
@@ -89,14 +89,14 @@ internal static class CliApplication
         var summary = BuildConsoleSummary(report);
         Console.WriteLine(summary);
 
-        // Console-only mode is for quick triage and skips file output completely.
+        // 只看 console 時就別落檔，方便快速先收一輪。
         if (arguments.ConsoleOnly)
         {
             return;
         }
 
-        // Bundle mode is the default support workflow:
-        // keep the summary, HTML report, and raw artifacts together in one folder.
+        // bundle 是預設 support 流程：
+        // summary、HTML、原始輸出放同一包，轉交比較省事。
         if (!string.IsNullOrWhiteSpace(arguments.ReportDirectory) || string.Equals(arguments.Format, "bundle", StringComparison.OrdinalIgnoreCase))
         {
             var reportDirectory = arguments.ReportDirectory
@@ -213,7 +213,7 @@ internal static class CliApplication
 
         if (resolvedProfilePath is not null)
         {
-            // Profile-driven mode keeps DNS/TCP checks consistent across support cases.
+            // 有 profile 時就照 profile 跑，DNS/TCP 檢查比較能維持一致。
             profile = DiagnosticProfileLoader.Load(resolvedProfilePath);
         }
         else
@@ -229,7 +229,7 @@ internal static class CliApplication
                 throw new DiagnosticProfileException("Target must be a valid hostname, IP address, or URL.");
             }
 
-            // Fall back to ad hoc mode for quick one-off diagnostics.
+            // 沒有 profile 就退回 ad hoc 模式，先做一次性的快速診斷。
             profile = BuildQuickDiagnosticProfile(arguments, options, normalizedTarget);
         }
 
@@ -390,7 +390,7 @@ internal sealed class CliArguments
         var force = false;
         var suppressAutoOpen = false;
 
-        // Keep parsing explicit and predictable for future tweaks.
+        // 這裡維持明確展開，之後補參數比較不容易改壞。
         for (var index = 0; index < args.Length; index++)
         {
             var token = args[index];

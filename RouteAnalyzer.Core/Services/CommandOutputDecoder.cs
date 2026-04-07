@@ -59,7 +59,7 @@ public static class CommandOutputDecoder
             }
             catch
             {
-                // Keep the decoder forgiving. We still have other candidates.
+                // 這裡先放寬一點，後面還有其他編碼可以試。
             }
 
             if (oemEncoding is not null)
@@ -67,7 +67,7 @@ public static class CommandOutputDecoder
                 yield return oemEncoding;
             }
 
-            // Big5 is a useful fallback for traditional Chinese Windows environments.
+            // 傳統中文 Windows 環境還是很常遇到 Big5，這裡補一手 fallback。
             Encoding? big5Encoding = null;
             try
             {
@@ -75,7 +75,7 @@ public static class CommandOutputDecoder
             }
             catch
             {
-                // Leave Big5 out if the runtime does not expose that code page.
+                // runtime 沒提供 Big5 就算了，不要讓整個解碼流程卡死。
             }
 
             if (big5Encoding is not null)

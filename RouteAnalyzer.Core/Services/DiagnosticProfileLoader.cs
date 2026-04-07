@@ -6,7 +6,7 @@ namespace RouteAnalyzer.Services;
 
 public static class DiagnosticProfileLoader
 {
-    // Keep the default file name stable so support can drop the EXE and profile together.
+    // 預設檔名先固定住，support 才能把 EXE 跟 profile 放同層直接發。
     public const string DefaultFileName = "routeanalyzer.profile.json";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -17,8 +17,8 @@ public static class DiagnosticProfileLoader
 
     public static string? TryFindDefaultProfilePath(IEnumerable<string>? searchRoots = null)
     {
-        // Search current working directory first, then next to the EXE.
-        // That makes local testing and published usage behave the same way.
+        // 先找目前目錄，再找 EXE 同層。
+        // 這樣本機測試和發出去的用法會比較一致。
         var roots = searchRoots?.ToArray()
             ?? [Directory.GetCurrentDirectory(), AppContext.BaseDirectory];
 
@@ -54,8 +54,8 @@ public static class DiagnosticProfileLoader
 
     public static void WriteSampleProfile(string path, bool overwrite = false)
     {
-        // Sample profile generation is mainly for first-time setup,
-        // so create the folder if needed and fail clearly on accidental overwrite.
+        // sample profile 主要是給第一次 setup 用。
+        // 目錄不在就先建，但誤覆蓋時要明確擋下來。
         var fullPath = Path.GetFullPath(path);
         if (File.Exists(fullPath) && !overwrite)
         {
@@ -73,7 +73,7 @@ public static class DiagnosticProfileLoader
 
     public static DiagnosticProfile CreateSampleProfile()
     {
-        // Keep the sample profile realistic enough that a support team can edit and adopt it quickly.
+        // sample profile 內容盡量貼近真實情境，helpdesk 才能改一改就上手。
         return new DiagnosticProfile
         {
             ProfileName = "Remote Support - VPN",
@@ -117,7 +117,7 @@ public static class DiagnosticProfileLoader
 
     public static DiagnosticProfile Normalize(DiagnosticProfile profile)
     {
-        // Normalize once at load time so the rest of the pipeline can assume clean values.
+        // 載入時先統一整理一次，後面流程就不用一直重複防呆。
         if (!TargetHostParser.TryNormalize(profile.TargetHost, out var normalizedTarget))
         {
             throw new DiagnosticProfileException("Profile targetHost must be a valid hostname, IP address, or URL.");
@@ -133,7 +133,7 @@ public static class DiagnosticProfileLoader
             throw new DiagnosticProfileException($"Profile maxHops must be between {RouteAnalyzerOptions.MinMaxHops} and {RouteAnalyzerOptions.MaxMaxHops}.");
         }
 
-        // DNS and TCP entries are normalized separately so validation errors stay specific.
+        // DNS 跟 TCP 分開整理，出錯時比較容易直接指出是哪一段設定有問題。
         var normalizedDnsLookups = profile.DnsLookups.Select(static lookup =>
         {
             if (!TargetHostParser.TryNormalize(lookup.Hostname, out var normalizedHostname))
