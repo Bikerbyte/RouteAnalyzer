@@ -1,7 +1,6 @@
 # Route Analyzer
 
-一個 client-side 網路狀態診斷工具。
-當 user 回報「連線很慢」「VPN 很卡」「網站連不上」時，能在 client-side 快速收一份診斷報告。
+一個 client-side 網路狀態診斷工具，在 client-side 收集診斷報告。
 
 ## Demo
 - 成功範例
