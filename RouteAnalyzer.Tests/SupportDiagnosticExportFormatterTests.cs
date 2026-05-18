@@ -10,11 +10,9 @@ public class SupportDiagnosticExportFormatterTests
     {
         var html = SupportDiagnosticExportFormatter.ToHtml(CreateReport());
 
-        Assert.Contains("Recommended next action", html);
-        Assert.Contains("Highlighted anomalies", html);
-        Assert.Contains("Observations", html);
+        Assert.Contains("Captured signals", html);
         Assert.Contains("Route Summary", html);
-        Assert.Contains("Copy IT summary", html);
+        Assert.Contains("Copy capture summary", html);
     }
 
     [Fact]
@@ -22,11 +20,9 @@ public class SupportDiagnosticExportFormatterTests
     {
         var html = SupportDiagnosticExportFormatter.ToHtml(CreateReport(preferredLanguage: ReportLanguage.TraditionalChinese));
 
-        Assert.Contains("data-switch-language=\"en\"", html);
-        Assert.Contains("data-switch-language=\"zh-TW\"", html);
         Assert.Contains("class=\"lang-zh\"", html);
-        Assert.Contains("\u5EFA\u8B70\u4E0B\u4E00\u6B65", html);
-        Assert.Contains("\u503C\u5F97\u6CE8\u610F\u7684\u8A0A\u865F", html);
+        Assert.Contains("\u6AA2\u6E2C\u8A0A\u865F", html);
+        Assert.Contains("\u8907\u88FD\u6AA2\u6E2C\u6458\u8981", html);
     }
 
     [Fact]
@@ -115,14 +111,10 @@ public class SupportDiagnosticExportFormatterTests
                     Note = "No obvious step-up is visible at this hop."
                 }
             ],
-            Narrative = "The path does not show a strong network fault.",
-            StatusLabel = "Stable",
-            StatusSummary = "The current path looks consistent.",
             RuntimeSummary = "Windows | .NET 10",
             DiagnosticMode = "ICMP ping + Windows tracert",
             TracerouteCommand = "tracert -d vpn.example.com",
             GeoDataProvider = "ipwho.is",
-            SuspectedIssue = null,
             RawTracerouteLines = rawTracerouteLines ?? ["trace output"]
         };
 
@@ -166,20 +158,16 @@ public class SupportDiagnosticExportFormatterTests
                     }
                 ]
             },
-            Assessment = new DiagnosticAssessment
+            SignalSummary = new ConnectionSignalSummary
             {
-                ScenarioKey = DiagnosticAssessmentEngine.ScenarioNoClearNetworkFaultDetected,
-                OverallStatusLabel = "Healthy",
-                FaultDomain = "No clear network fault detected",
-                UserSummary = "The current network path looks healthy.",
-                ItSummary = "No strong network-side issue stands out in this run.",
-                EvidenceHighlights =
+                CaptureStatusLabel = "Captured",
+                Overview = "Captured ping, traceroute, DNS 1/1, and TCP 1/1. Average latency: 48 ms; packet loss: 0%; hops parsed: 1.",
+                Signals =
                 [
-                    "Ping success rate: 100% with average latency 48 ms."
-                ],
-                Recommendations =
-                [
-                    "Collect another run if the slowdown returns."
+                    "Ping replies: 4/4; average latency: 48 ms; packet loss: 0%.",
+                    "Traceroute hops parsed: 1.",
+                    "DNS checks passed: 1/1.",
+                    "TCP checks passed: 1/1."
                 ]
             },
             PrimaryRoute = route,

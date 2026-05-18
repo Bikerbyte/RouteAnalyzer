@@ -1,7 +1,12 @@
 # Route Analyzer
 
-一個 client-side 網路狀態診斷工具。
-當 user 回報「連線很慢」「VPN 很卡」「網站連不上」時，能在 client-side 快速收一份診斷報告。
+一個 local-first 網路路徑診斷工具。
+當 user 回報「連線很慢」「VPN 很卡」「網站連不上」時，可以直接開本機診斷台，輸入目標後取得可轉交給 support / IT 的判讀、路徑圖、下一步建議與完整報告。
+
+目前專案分成兩個入口：
+
+- `RouteAnalyzer.App`：主要使用入口，提供本機 web UI 與互動式診斷流程。
+- `RouteAnalyzer.Cli`：進階 / 自動化入口，保留 profile-driven 與 headless report bundle 流程。
 
 ## Demo
 - 成功範例
@@ -15,13 +20,41 @@
 
 輸出 summary：
 
-- 整體狀態
-- 可能的 fault domain
-- 下一步建議
+- ping / packet loss / jitter
 - DNS / TCP / route 訊號
-- 可展之完整 traceroute 與明細
+- 可展開的完整 traceroute 與明細
 
-## Guide
+## One-click App
+
+產生可交付給 user 的 portable app：
+
+```powershell
+./scripts/publish-app.ps1 -Runtime win-x64 -Configuration Release
+```
+
+輸出位置：
+
+```text
+artifacts/app/win-x64
+```
+
+把整個資料夾交給 user，user 只要雙擊 `Start-RouteAnalyzer.cmd` 或 `RouteAnalyzer.App.exe`。App 會自己啟動 localhost 並開瀏覽器。
+
+本機開發啟動：
+
+```powershell
+dotnet run --project RouteAnalyzer.App --urls http://localhost:5015
+```
+
+開啟：
+
+```text
+http://localhost:5015
+```
+
+診斷完成後，app 會在 `reports/app/<report-id>/` 產生完整 bundle，並可從畫面直接打開 `report.html`。
+
+## CLI Guide
 
 若當前目錄或 EXE 同層有 `routeanalyzer.profile.json`，直接執行便會直接使用該 profile：
 
@@ -117,4 +150,4 @@ dotnet test RouteAnalyzer.sln
 ./scripts/publish-cli.ps1 -Runtime win-x64 -Configuration Release
 ```
 
-prodution menu : `artifacts/cli/<runtime>`。
+production output: `artifacts/cli/<runtime>`。

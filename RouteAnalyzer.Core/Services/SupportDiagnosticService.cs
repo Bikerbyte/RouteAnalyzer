@@ -45,16 +45,15 @@ public sealed class SupportDiagnosticService
         var routeReport = await routeTask;
         var dnsResults = await dnsTask;
         var tcpResults = await tcpTask;
-        var assessment = DiagnosticAssessmentEngine.Assess(profile, routeReport, dnsResults, tcpResults);
+        var signalSummary = ConnectionSignalSummaryBuilder.Build(routeReport, dnsResults, tcpResults);
 
         stopwatch.Stop();
         var networkContext = BuildNetworkContext();
 
         _logger.LogInformation(
-            "Completed support diagnostic {ExecutionId} in {DurationMs} ms with status {StatusLabel}",
+            "Completed support diagnostic {ExecutionId} in {DurationMs} ms",
             executionId,
-            stopwatch.ElapsedMilliseconds,
-            assessment.OverallStatusLabel);
+            stopwatch.ElapsedMilliseconds);
 
         return new SupportDiagnosticReport
         {
@@ -65,7 +64,7 @@ public sealed class SupportDiagnosticService
             RuntimeSummary = $"{RuntimeInformation.OSDescription.Trim()} | .NET {Environment.Version}",
             NetworkContext = networkContext,
             Profile = profile,
-            Assessment = assessment,
+            SignalSummary = signalSummary,
             PrimaryRoute = routeReport,
             DnsResults = dnsResults,
             TcpResults = tcpResults

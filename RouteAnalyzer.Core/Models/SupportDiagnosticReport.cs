@@ -16,7 +16,7 @@ public sealed class SupportDiagnosticReport
 
     public required DiagnosticProfile Profile { get; init; }
 
-    public required DiagnosticAssessment Assessment { get; init; }
+    public required ConnectionSignalSummary SignalSummary { get; init; }
 
     public required RouteDiagnosticReport PrimaryRoute { get; init; }
 

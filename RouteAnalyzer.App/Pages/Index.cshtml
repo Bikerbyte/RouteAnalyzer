@@ -1,0 +1,139 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Local Network Triage";
+}
+
+<section class="shell" aria-labelledby="app-title">
+    <header class="topbar">
+        <a class="brand" asp-page="/Index" aria-label="Route Analyzer home">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>Route Analyzer</span>
+        </a>
+        <div class="topbar-status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>Local route console</span>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <section class="scanner-panel" aria-label="Diagnostic setup">
+            <div>
+                <p class="eyebrow">NETWORK TRIAGE</p>
+                <h1 id="app-title">Capture the route without guessing.</h1>
+                <p class="lede">Collect ping, DNS, TCP, and traceroute evidence in one support-ready snapshot.</p>
+            </div>
+
+            <form id="diagnostic-form" class="scan-form">
+                <label class="field">
+                    <span>Target</span>
+                    <input id="targetHost" name="targetHost" value="github.com" autocomplete="off" placeholder="vpn.company.com or https://example.com" required />
+                </label>
+
+                <div class="preset-row" aria-label="Target presets">
+                    <button type="button" class="preset-button" data-preset="github.com">GitHub</button>
+                    <button type="button" class="preset-button" data-preset="1.1.1.1">1.1.1.1</button>
+                    <button type="button" class="preset-button" data-preset="google.com">Google</button>
+                </div>
+
+                <div class="control-grid">
+                    <label class="field compact">
+                        <span>Ping probes</span>
+                        <input id="pingCount" name="pingCount" type="number" min="3" max="10" value="4" />
+                    </label>
+                    <label class="field compact">
+                        <span>Max hops</span>
+                        <input id="maxHops" name="maxHops" type="number" min="4" max="64" value="24" />
+                    </label>
+                </div>
+
+                <div class="toggle-grid" aria-label="Scan options">
+                    <label class="toggle">
+                        <input id="includeDnsCheck" type="checkbox" checked />
+                        <span>DNS</span>
+                    </label>
+                    <label class="toggle">
+                        <input id="includeHttpsCheck" type="checkbox" checked />
+                        <span>HTTPS TCP</span>
+                    </label>
+                    <label class="toggle">
+                        <input id="includeGeoDetails" type="checkbox" checked />
+                        <span>Geo hints</span>
+                    </label>
+                </div>
+
+                <button class="run-button" type="submit">
+                    <span class="run-icon" aria-hidden="true"></span>
+                    Run diagnostic
+                </button>
+            </form>
+        </section>
+
+        <section class="result-panel" aria-live="polite">
+            <div id="empty-state" class="empty-state">
+                <div class="route-visual" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <h2>Ready for a clean capture.</h2>
+                <p>Start with a target and keep the result as a factual baseline.</p>
+            </div>
+
+            <div id="loading-state" class="loading-state hidden">
+                <div class="scan-radar" aria-hidden="true"></div>
+                <h2>Scanning route...</h2>
+                <p>Collecting ping, DNS, TCP, traceroute, and local adapter context.</p>
+            </div>
+
+            <div id="error-state" class="error-state hidden" role="alert"></div>
+
+            <article id="result-state" class="result-state hidden">
+                <div class="result-header">
+                    <div>
+                        <p class="eyebrow">CAPTURE</p>
+                        <h2 id="result-title">Result</h2>
+                        <p id="result-summary" class="summary-text"></p>
+                    </div>
+                    <span id="result-status" class="status-pill">Captured</span>
+                </div>
+
+                <div class="next-action">
+                    <span>Snapshot overview</span>
+                    <strong id="overview-text"></strong>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric" id="metric-latency"></div>
+                    <div class="metric" id="metric-loss"></div>
+                    <div class="metric" id="metric-dns"></div>
+                    <div class="metric" id="metric-tcp"></div>
+                </div>
+
+                <div class="chart-wrap">
+                    <div class="chart-head">
+                        <span>Route shape</span>
+                        <small id="hop-count">0 hops</small>
+                    </div>
+                    <div id="hop-chart" class="hop-chart"></div>
+                </div>
+
+                <div class="insight-grid">
+                    <section>
+                        <h3>Captured signals</h3>
+                        <ul id="signal-list"></ul>
+                    </section>
+                </div>
+
+                <div class="handoff">
+                    <textarea id="copy-text" readonly rows="7" aria-label="Support handoff text"></textarea>
+                    <div class="button-row">
+                        <button type="button" id="copy-button" class="secondary-button">Copy handoff</button>
+                        <a id="report-link" class="secondary-button" href="#" target="_blank" rel="noreferrer">Open full report</a>
+                    </div>
+                </div>
+            </article>
+        </section>
+    </div>
+</section>

@@ -43,11 +43,10 @@ public static class RouteDiagnosticExportFormatter
         var builder = new StringBuilder();
         builder.AppendLine($"Execution : {report.ExecutionId}");
         builder.AppendLine($"Target    : {report.TargetHost}");
-        builder.AppendLine($"Status    : {report.StatusLabel}");
-        builder.AppendLine($"Summary   : {report.StatusSummary}");
         builder.AppendLine($"Ping Avg  : {report.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms");
         builder.AppendLine($"Loss      : {report.PingSummary.PacketLossPercent}% ({report.PingSummary.Received}/{report.PingSummary.Sent})");
         builder.AppendLine($"Jitter    : {report.PingSummary.JitterMs?.ToString() ?? "-"} ms");
+        builder.AppendLine($"Hops      : {report.Hops.Count}");
         builder.AppendLine($"Duration  : {report.DurationMs} ms");
         builder.AppendLine($"Runtime   : {report.RuntimeSummary}");
         builder.AppendLine();
@@ -59,12 +58,6 @@ public static class RouteDiagnosticExportFormatter
             var latency = hop.AverageLatencyMs?.ToString() ?? "*";
             var delta = hop.LatencyDeltaMs?.ToString() ?? "-";
             builder.AppendLine($"#{hop.HopNumber,2} {hop.DisplayAddress,-40} {latency,5} ms  d{delta,4}  {hop.ScopeLabel}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(report.SuspectedIssue))
-        {
-            builder.AppendLine();
-            builder.AppendLine($"Suspected issue: {report.SuspectedIssue}");
         }
 
         return builder.ToString();

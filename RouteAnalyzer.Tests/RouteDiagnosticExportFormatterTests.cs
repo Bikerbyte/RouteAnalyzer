@@ -6,15 +6,15 @@ namespace RouteAnalyzer.Tests;
 public class RouteDiagnosticExportFormatterTests
 {
     [Fact]
-    public void ToText_IncludesStatusSummaryAndIssue()
+    public void ToText_IncludesMeasuredValues()
     {
         var report = CreateReport();
 
         var output = RouteDiagnosticExportFormatter.ToText(report);
 
-        Assert.Contains("Status    : Investigate", output);
-        Assert.Contains("Summary   : Latency rises after the ISP edge.", output);
-        Assert.Contains("Suspected issue: Elevated latency begins near hop 2", output);
+        Assert.Contains("Ping Avg  : 88 ms", output);
+        Assert.Contains("Loss      : 25% (3/4)", output);
+        Assert.Contains("Hops      : 2", output);
     }
 
     [Fact]
@@ -100,14 +100,10 @@ public class RouteDiagnosticExportFormatterTests
                     Note = "Latency increases by 81 ms compared with the previous hop."
                 }
             ],
-            Narrative = "Average ping is 88 ms and the primary signal is: Elevated latency begins near hop 2.",
-            StatusLabel = "Investigate",
-            StatusSummary = "Latency rises after the ISP edge.",
             RuntimeSummary = "Windows | .NET 10.0.0",
             DiagnosticMode = "ICMP ping + Windows tracert",
             TracerouteCommand = "tracert -d -w 900 -h 16 vpn.example.com",
             GeoDataProvider = "ipwho.is",
-            SuspectedIssue = "Elevated latency begins near hop 2",
             RawTracerouteLines = ["  1    <1 ms    <1 ms    <1 ms  192.168.1.1"]
         };
     }
