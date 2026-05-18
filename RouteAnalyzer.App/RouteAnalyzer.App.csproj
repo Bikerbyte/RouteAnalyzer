@@ -4,10 +4,20 @@
     <ProjectReference Include="..\RouteAnalyzer.Core\RouteAnalyzer.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Remove="wwwroot\**" />
+    <EmbeddedResource Include="wwwroot\css\site.css" LogicalName="RouteAnalyzer.App.Assets.site.css" />
+    <EmbeddedResource Include="wwwroot\js\site.js" LogicalName="RouteAnalyzer.App.Assets.site.js" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings*.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
 
 </Project>

@@ -1,147 +1,97 @@
 # Route Analyzer
 
-一個 client-side 網路狀態診斷工具，在 client-side 收集診斷報告。
+輕量的 local-first 網路檢測與視覺化工具。
 
-## Demo
-- 成功範例
-<img width="736" height="514" alt="Screenshot 2026-04-02 193121" src="https://github.com/user-attachments/assets/8fcffdff-eafc-4abe-bd26-5b8e80d75932" />
-<img width="638" height="576" alt="Screenshot 2026-04-02 193246" src="https://github.com/user-attachments/assets/1f3811b2-5905-4f77-b977-3dcbc0902bf0" />
+Route Analyzer 不負責猜測「誰的網路壞了」。它只快速收集可檢查、可轉交、可重跑的事實訊號：ping、packet loss、DNS、TCP、traceroute hops、本機網卡資訊，然後整理成一份支援用 snapshot。
 
-<br/><br/>
-- 異常範例
-<img width="1417" height="878" alt="image" src="https://github.com/user-attachments/assets/52d3dcec-0be0-4d95-a5c4-9fe43c8279c0" />
+## 使用方式
 
+使用者不需要安裝 .NET，不需要打指令，也不需要 `dotnet build`。
 
-輸出 summary：
+1. 從 GitHub Release 下載 `RouteAnalyzer.exe`。
+2. 雙擊 `RouteAnalyzer.exe`。
+3. 瀏覽器會自動開啟本機檢測頁。
+4. 輸入目標，例如 `vpn.company.com`、`github.com`、`1.1.1.1`。
+5. 按 `Run diagnostic`。
+6. 用完後按右上角 `Close app`，本機 server 會關閉並釋放 port。
 
-- ping / packet loss / jitter
-- DNS / TCP / route 訊號
-- 可展開的完整 traceroute 與明細
+檢測結果會存在 exe 同層的 `reports/app/<report-id>/`。
 
-## One-click App
+如果只關掉瀏覽器 tab，`RouteAnalyzer.exe` 仍可能在背景繼續執行。再次雙擊時如果預設 port 被占用，app 會自動改用另一個可用 localhost port。
 
-產生可交付給 user 的 portable app：
+## 畫面
+
+啟動後直接進入檢測畫面：
+
+![Route Analyzer home](screenshots/routeanalyzer-home.png)
+
+完成後會看到 connection snapshot、route shape、captured signals，以及可複製給 support / IT 的摘要：
+
+![Route Analyzer result](screenshots/routeanalyzer-result.png)
+
+## App 會檢測什麼
+
+- ping average / packet loss / jitter
+- DNS lookup 是否成功
+- TCP port 是否可連
+- traceroute hop 明細
+- hop timeout 與 latency step-up 標記
+- 本機連線資訊，例如 adapter、gateway、DNS servers
+- HTML / JSON / CSV / text report
+
+## 不做什麼
+
+Route Analyzer 不做 rule-based fault domain 判斷。
+
+它不會宣稱問題一定是 Wi-Fi、ISP、transit 或目的端服務。這些結論很容易不準，也很難維護。工具只呈現檢測訊號。
+
+## 給維護者
+
+本機產生單一 Windows app：
 
 ```powershell
 ./scripts/publish-app.ps1 -Runtime win-x64 -Configuration Release
 ```
 
-輸出位置：
+輸出：
 
 ```text
-artifacts/app/win-x64
+artifacts/app/win-x64/RouteAnalyzer.exe
 ```
 
-把整個資料夾交給 user，user 只要雙擊 `Start-RouteAnalyzer.cmd` 或 `RouteAnalyzer.App.exe`。App 會自己啟動 localhost 並開瀏覽器。
+GitHub Actions 也可以手動執行 `Publish portable app` workflow。推 `v*` tag 時會把 `RouteAnalyzer.exe` 放到 GitHub Release。
 
-本機開發啟動：
-
-```powershell
-dotnet run --project RouteAnalyzer.App --urls http://localhost:5015
-```
-
-開啟：
-
-```text
-http://localhost:5015
-```
-
-診斷完成後，app 會在 `reports/app/<report-id>/` 產生完整 bundle，並可從畫面直接打開 `report.html`。
-
-## CLI Guide
-
-若當前目錄或 EXE 同層有 `routeanalyzer.profile.json`，直接執行便會直接使用該 profile：
-
-```powershell
-RouteAnalyzer.Cli.exe
-```
-
-用指定 profile 執行：
-
-```powershell
-dotnet run --project RouteAnalyzer.Cli -- --profile-file .\routeanalyzer.profile.json
-```
-
-測試指定 URL：
-
-```powershell
-dotnet run --project RouteAnalyzer.Cli -- --target vpn.example.com
-```
-
-Console only，不自動開報表：
-
-```powershell
-dotnet run --project RouteAnalyzer.Cli -- --target vpn.example.com --console-only --no-open
-```
-
-產生 sample profile：
-
-```powershell
-dotnet run --project RouteAnalyzer.Cli -- --create-sample-profile
-```
-
-## Profile 設定檔
-
-這個工具目前為 profile-driven。
-
-需將固定要檢查的目標、DNS lookup、TCP port 都寫進 profile，之後便可連同 profile 與執行檔一同提供給 user 運行。
-
-範例檔案：[`routeanalyzer.profile.example.json`](/e:/Biker/Code/RouteAnalyzer/routeanalyzer.profile.example.json)
-
-目前 profile 會用到這幾個核心欄位：
-
-- `profileName`
-- `destinationName`
-- `targetHost`
-- `dnsLookups`
-- `tcpEndpoints`
-
-## 產出結果
-
-每次執行預設會產生一個報告資料夾，並自動開啟 `report.html`。
-
-內容包含：
-
-- `summary.txt`
-  - 短摘要
-- `report.json`
-  - 後續分析或程式處理使用
-- `report.html`
-  - 直觀閱讀使用
-- `route-hops.csv`
-  - network hop 明細
-
-
-## CLI 參數
-
-- `--profile-file <path>`
-- `--target <value>`
-- `--ping-count <3-10>`
-- `--max-hops <4-64>`
-- `--format <bundle|text|json|csv|html>`
-- `--output <path>`
-- `--report-dir <path>`
-- `--console-only`
-- `--language <en|zh-TW>`
-- `--create-sample-profile [path]`
-- `--force`
-- `--no-geo`
-- `--no-open`
-- `--help`
-
-## Build / Publish
-
-本機驗證：
+## 開發
 
 ```powershell
 dotnet build RouteAnalyzer.sln
 dotnet test RouteAnalyzer.sln
 ```
 
-輸出 Windows EXE：
+本機跑 app：
 
 ```powershell
-./scripts/publish-cli.ps1 -Runtime win-x64 -Configuration Release
+dotnet run --project RouteAnalyzer.App --urls http://localhost:5015
 ```
 
-production output: `artifacts/cli/<runtime>`。
+## CLI
+
+CLI 保留給進階或自動化情境。
+
+使用 profile：
+
+```powershell
+RouteAnalyzer.Cli.exe --profile-file .\routeanalyzer.profile.json
+```
+
+快速測目標：
+
+```powershell
+RouteAnalyzer.Cli.exe --target github.com
+```
+
+產生 sample profile：
+
+```powershell
+RouteAnalyzer.Cli.exe --create-sample-profile
+```
