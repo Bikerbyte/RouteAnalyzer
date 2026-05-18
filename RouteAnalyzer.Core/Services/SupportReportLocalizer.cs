@@ -1,156 +1,9 @@
-using System.Text.RegularExpressions;
 using RouteAnalyzer.Models;
 
 namespace RouteAnalyzer.Services;
 
-public static partial class SupportReportLocalizer
+public static class SupportReportLocalizer
 {
-    public static LocalizedAssessmentView GetAssessmentView(SupportDiagnosticReport report, string? language)
-    {
-        if (!ReportLanguage.IsTraditionalChinese(language))
-        {
-            return new LocalizedAssessmentView(
-                report.Assessment.OverallStatusLabel,
-                report.Assessment.FaultDomain,
-                report.Assessment.UserSummary,
-                report.Assessment.ItSummary,
-                report.Assessment.EvidenceHighlights,
-                report.Assessment.Recommendations);
-        }
-
-        var route = report.PrimaryRoute;
-        var failedDns = report.DnsResults.Where(static result => !result.Success).ToArray();
-        var failedTcp = report.TcpResults.Where(static result => !result.Success).ToArray();
-        var firstSpike = route.Hops.FirstOrDefault(static hop => hop.SuspectedSpike);
-        var lastHop = route.Hops.LastOrDefault();
-        var routeHealthy = string.Equals(route.StatusLabel, "Stable", StringComparison.OrdinalIgnoreCase);
-        var severeLoss = route.PingSummary.PacketLossPercent >= 40;
-        var firstHopIssue = route.Hops.FirstOrDefault(static hop => hop.HopNumber == 1 && (hop.IsTimeout || hop.SuspectedSpike || (hop.AverageLatencyMs ?? 0) >= 20));
-        var accessHopIssue = route.Hops.FirstOrDefault(static hop => hop.HopNumber <= 2 && (hop.SuspectedSpike || hop.IsTimeout));
-        var finalHopIssue = lastHop is not null
-            && (lastHop.IsTimeout || lastHop.SuspectedSpike || string.Equals(lastHop.ScopeLabel, "Destination", StringComparison.OrdinalIgnoreCase));
-
-        var overallStatus = TranslateOverallStatus(report.Assessment.OverallStatusLabel, ReportLanguage.TraditionalChinese);
-
-        return report.Assessment.ScenarioKey switch
-        {
-            DiagnosticAssessmentEngine.ScenarioLocalDnsOrInitialConnectivity => new LocalizedAssessmentView(
-                overallStatus,
-                "本機 DNS 或起始連線",
-                "結果像是本機 DNS 或前段連線異常，流量還沒到目的端前就已經失敗。",
-                "所有設定的 DNS 查詢都失敗，而且路由測試沒有收到 ICMP 回應。這更接近本機解析器異常、網際網路未連線，或 VPN 尚未完成前置連線的情況。",
-                BuildEvidence(report, ReportLanguage.TraditionalChinese),
-                [
-                    "請重新連目前的網路，或切換到另一個網路後再試一次。",
-                    "如果所有目的地都受影響，請重新啟動 Wi-Fi 或家用路由器。",
-                    "如果此環境需要 VPN 才能解析內部名稱，請確認 VPN 用戶端已正確連線。"
-                ]),
-            DiagnosticAssessmentEngine.ScenarioCompanyEdgeServiceTcpFailure => new LocalizedAssessmentView(
-                overallStatus,
-                "目的端邊界或目標服務",
-                "結果顯示到目的端的路徑大致可達，但目標服務埠仍未接受連線。",
-                "路由品質看起來健康，且 DNS 解析成功，但所有設定的 TCP 端點都失敗。這種型態比較接近服務監聽、防火牆、VPN gateway 或目的端邊界設備的問題，而不是使用者家中網路。",
-                BuildEvidence(report, ReportLanguage.TraditionalChinese),
-                [
-                    "檢查目的端 VPN gateway、reverse proxy、防火牆或目標服務的健康狀態。",
-                    "和其他使用者或既有監控比對，確認相同服務埠是否也異常。",
-                    "查看伺服器端日誌，確認在回報時間點是否有拒絕連線或逾時。"
-                ]),
-            DiagnosticAssessmentEngine.ScenarioLocalNetworkOrWifi => new LocalizedAssessmentView(
-                overallStatus,
-                "本地網路或 Wi-Fi",
-                "結果顯示在非常靠近這台裝置的節點便出現問題，常見於 Wi-Fi 品質、路由器的 Proxy 和防火牆設定。",
-                firstHopIssue is not null
-                    ? $"第一跳就出現異常，發生在第 {firstHopIssue.HopNumber} 跳（{GetHopScopeLabel(firstHopIssue, ReportLanguage.TraditionalChinese)}）。再加上封包遺失 {route.PingSummary.PacketLossPercent}% ，目前比較接近使用者端 LAN 或 gateway。"
-                    : $"目前封包遺失為 {route.PingSummary.PacketLossPercent}% ，而且沒有更明確的下游訊號，建議先從本地接入網路開始確認。",
-                BuildEvidence(report, ReportLanguage.TraditionalChinese),
-                [
-                    "請優先改用有線網路，並檢查路由器的 Proxy 和防火牆設定。",
-                    "請使用者重新連接 Wi-Fi，或重新啟動家用路由器。",
-                    "如果可以，改用手機熱點再跑一次，以切開家用網路因素。"
-                ]),
-            DiagnosticAssessmentEngine.ScenarioIspOrAccessNetwork => new LocalizedAssessmentView(
-                overallStatus,
-                "ISP 或接入網路",
-                "結果顯示路徑在前幾跳就開始不穩定，較像 ISP 側或接入網路。",
-                accessHopIssue is not null
-                    ? $"異常訊號在第 {accessHopIssue.HopNumber} 跳（{GetHopScopeLabel(accessHopIssue, ReportLanguage.TraditionalChinese)}）就出現，問題較可能位在使用者 gateway 與 ISP 接入邊界之間。"
-                    : $"延遲在第 {firstSpike?.HopNumber ?? 0} 跳開始明顯上升，位置夠前段，較像接入 ISP 問題，而不是目標服務本身。",
-                BuildEvidence(report, ReportLanguage.TraditionalChinese),
-                [
-                    "改用另一個網路，例如手機熱點，再跑一次檢測以確認是不是 ISP 路徑問題。",
-                    "如果同樣現象持續發生，可以請使用者帶著報告聯絡 ISP。",
-                    "建議在不同時間再跑 1 到 2 次，確認問題是尖峰型還是持續型。"
-                ]),
-            DiagnosticAssessmentEngine.ScenarioInternetTransitPath => new LocalizedAssessmentView(
-                overallStatus,
-                "公網 transit 路徑",
-                "結果顯示公網中段路徑有延遲增加，速度變慢可能發生在 ISP 與目的端之間。",
-                $"延遲在第 {firstSpike?.HopNumber ?? 0} 跳開始上升，位置落在接入邊界之後、目標之前，這比較接近 transit 或上游路徑壅塞，而不是純本地問題。",
-                BuildEvidence(report, ReportLanguage.TraditionalChinese),
-                [
-                    "稍晚重跑一次，確認公網路徑異常是否持續存在。",
-                    "如果可以，和另一個網路或其他區域的使用者比對同一條路徑。",
-                    "若業務影響高，建議蒐集多份報告後再向 ISP 或上游業者升級。"
-                ]),
-            DiagnosticAssessmentEngine.ScenarioCompanyNetworkOrDestinationService => new LocalizedAssessmentView(
-                overallStatus,
-                "目的端網路或目標服務",
-                "結果顯示症狀集中在路徑後段，問題可能靠近目的端邊界或服務本身。",
-                failedTcp.Length > 0
-                    ? "一個或多個目標服務埠失敗，但路由已經走到後段 hop，建議優先調查目的端邊界、VPN listener 或目標服務。"
-                    : "整條路徑在前段都大致正常，異常集中在最後一段，因此目的端邊界或目標主機仍是較可能的故障區段。",
-                BuildEvidence(report, ReportLanguage.TraditionalChinese),
-                [
-                    "檢查 VPN gateway、remote desktop gateway、reverse proxy 或目標服務健康狀態。",
-                    "確認目的端防火牆規則與 listener 狀態。",
-                    "把這份報告和同時間的伺服器監控與日誌一起比對。"
-                ]),
-            DiagnosticAssessmentEngine.ScenarioNoClearNetworkFaultDetected => new LocalizedAssessmentView(
-                overallStatus,
-                "未偵測到明確網路故障",
-                "檢測中的路由、DNS 與服務埠檢查目前都看起來健康。",
-                "執行結果沒有看到明顯的網路側問題。如果使用者仍然感覺緩慢，問題可能偏向應用程式本身、間歇性狀況，或端點負載。",
-                BuildEvidence(report, ReportLanguage.TraditionalChinese),
-                [
-                    "如果問題再次出現，請再收一次報告。",
-                    "檢查目標應用程式、VPN client 日誌，或端點效能指標。",
-                    "把同一台裝置在不同網路下的結果做比對。"
-                ]),
-            _ => new LocalizedAssessmentView(
-                overallStatus,
-                severeLoss || finalHopIssue ? "需進一步確認" : "間歇性或資訊不足",
-                "檢測結果有一些警訊，但還不足以直接指向單一故障域。",
-                "沒有明確異常訊號，但無法直接判定是家用網路、ISP、公網 transit 或目的端邊界問題。",
-                BuildEvidence(report, ReportLanguage.TraditionalChinese),
-                [
-                    "建議在問題實際發生時再收一次報告。",
-                    "改用另一個網路再測一次，以切開本地與遠端因素。",
-                    "把這份報告和應用程式或 VPN client 日誌一起看，再決定是否升級。"
-                ])
-        };
-    }
-
-    public static LocalizedRouteView GetRouteView(RouteDiagnosticReport route, string? language)
-    {
-        if (!ReportLanguage.IsTraditionalChinese(language))
-        {
-            return new LocalizedRouteView(
-                route.StatusLabel,
-                route.StatusSummary,
-                route.Narrative,
-                route.SuspectedIssue);
-        }
-
-        var localizedIssue = LocalizeSuspectedIssue(route);
-
-        return new LocalizedRouteView(
-            TranslateRouteStatus(route.StatusLabel, ReportLanguage.TraditionalChinese),
-            BuildRouteStatusSummary(route, localizedIssue, ReportLanguage.TraditionalChinese),
-            BuildRouteNarrative(route, localizedIssue, ReportLanguage.TraditionalChinese),
-            localizedIssue);
-    }
-
     public static string GetHopScopeLabel(RouteHop hop, string? language)
     {
         if (!ReportLanguage.IsTraditionalChinese(language))
@@ -204,45 +57,12 @@ public static partial class SupportReportLocalizer
             return "此跳沒有回覆 ICMP。";
         }
 
-        if (hop.SuspectedSpike && hop.LatencyDeltaMs is int delta)
+        if (hop.LatencyDeltaMs is int delta && delta >= 25)
         {
             return $"比前一跳延遲增加了 {delta} ms。";
         }
 
-        return "沒有明顯的延遲。";
-    }
-
-    public static string TranslateOverallStatus(string status, string? language)
-    {
-        if (!ReportLanguage.IsTraditionalChinese(language))
-        {
-            return status;
-        }
-
-        return status switch
-        {
-            "Healthy" => "健康",
-            "Warning" => "警告",
-            "Action Needed" => "需要處理",
-            _ => status
-        };
-    }
-
-    public static string TranslateRouteStatus(string status, string? language)
-    {
-        if (!ReportLanguage.IsTraditionalChinese(language))
-        {
-            return status;
-        }
-
-        return status switch
-        {
-            "Stable" => "穩定",
-            "Observe" => "觀察",
-            "Investigate" => "需調查",
-            "Critical" => "嚴重",
-            _ => status
-        };
+        return "沒有明顯的延遲變化。";
     }
 
     public static string Text(string key, string? language)
@@ -251,10 +71,8 @@ public static partial class SupportReportLocalizer
 
         return key switch
         {
-            "ReportTitle" => zh ? "Route Analyzer 支援報告" : "Route Analyzer Support Report",
+            "ReportTitle" => zh ? "Route Analyzer 連線檢測報告" : "Route Analyzer Capture Report",
             "RunDetails" => zh ? "執行資訊" : "Run Details",
-            "UserSummary" => zh ? "使用者摘要" : "User Summary",
-            "ItSummary" => zh ? "IT 摘要" : "IT Summary",
             "Destination" => zh ? "目的端" : "Destination",
             "Machine" => zh ? "裝置名稱" : "Machine",
             "ConnectionType" => zh ? "連線類型" : "Connection type",
@@ -264,24 +82,9 @@ public static partial class SupportReportLocalizer
             "Target" => zh ? "目標" : "Target",
             "Generated" => zh ? "產生時間" : "Generated",
             "ExecutionId" => zh ? "執行 ID" : "Execution ID",
-            "FaultDomain" => zh ? "故障域" : "Fault domain",
-            "PossibleFaultDomain" => zh ? "可能故障區段" : "Possible fault domain",
-            "OverallFinding" => zh ? "總體觀察" : "Overall finding",
-            "Observations" => zh ? "觀察到的訊號" : "Observations",
-            "Interpretation" => zh ? "判讀" : "Interpretation",
-            "SuspiciousSignals" => zh ? "值得注意的訊號" : "Highlighted anomalies",
-            "NoSuspiciousSignals" => zh ? "這次執行沒有看到高風險異常，但仍有一些低訊號 observation 值得記錄。" : "No high-risk anomaly was confirmed in this run, but a few low-signal observations are still worth noting.",
-            "RecommendedNextAction" => zh ? "建議下一步" : "Recommended next action",
+            "Overview" => zh ? "檢測摘要" : "Capture overview",
+            "Signals" => zh ? "檢測訊號" : "Captured signals",
             "Latency" => zh ? "延遲" : "Latency",
-            "Signal" => zh ? "訊號" : "Signal",
-            "CopyItSummary" => zh ? "複製 IT 摘要" : "Copy IT summary",
-            "CopyIncidentNote" => zh ? "複製事件摘要" : "Copy incident note",
-            "Copied" => zh ? "已複製" : "Copied",
-            "NoSuspiciousHops" => zh ? "這次沒有看到需要直接判定為異常的 hop，但仍可留意 route 中較小的延遲變化。" : "No hop was strong enough to call out as a confirmed anomaly, but smaller route changes may still be worth noting.",
-            "FullRouteDetail" => zh ? "完整路由細節" : "Full route detail",
-            "ChecksOverview" => zh ? "檢查概覽" : "Checks overview",
-            "DetailHint" => zh ? "完整細節請參考 HTML 報告、JSON 或 route-hops.csv。" : "For full detail, use the HTML report, JSON, or route-hops.csv.",
-            "AverageLatency" => zh ? "平均延遲" : "Average latency",
             "PacketLoss" => zh ? "封包遺失" : "Packet loss",
             "Jitter" => zh ? "抖動" : "Jitter",
             "DnsChecks" => zh ? "DNS 檢查" : "DNS checks",
@@ -294,7 +97,6 @@ public static partial class SupportReportLocalizer
             "Hostname" => zh ? "主機名稱" : "Hostname",
             "RouteDetail" => zh ? "路由細節" : "Route Detail",
             "RouteSummary" => zh ? "路由摘要" : "Route Summary",
-            "Narrative" => zh ? "敘述" : "Narrative",
             "Hops" => zh ? "跳點" : "Hops",
             "Hop" => zh ? "Hop" : "Hop",
             "Address" => zh ? "位址" : "Address",
@@ -313,180 +115,18 @@ public static partial class SupportReportLocalizer
             "Language" => zh ? "語言" : "Language",
             "English" => zh ? "英文" : "English",
             "TraditionalChinese" => zh ? "繁中" : "Traditional Chinese",
-            "PathHighlights" => zh ? "路徑亮點" : "Path Highlights",
             "HopsParsed" => zh ? "已解析 hops" : "Hops parsed",
             "TimeoutHops" => zh ? "超時 hops" : "Timeout hops",
-            "FirstSpike" => zh ? "第一個尖峰" : "First spike",
             "GeoProvider" => zh ? "Geo 資料來源" : "Geo provider",
             "DiagnosticMode" => zh ? "診斷模式" : "Diagnostic mode",
             "Command" => zh ? "命令" : "Command",
             "Runtime" => zh ? "執行環境" : "Runtime",
             "None" => zh ? "無" : "None",
-            "NextSteps" => zh ? "下一步建議" : "Next steps",
-            "Evidence" => zh ? "判斷依據" : "Evidence",
             "Summary" => zh ? "摘要" : "Summary",
             "Loss" => zh ? "遺失" : "Loss",
-            "ConsoleTitle" => zh ? "Route Analyzer" : "Route Analyzer",
+            "CopyHandoff" => zh ? "複製檢測摘要" : "Copy capture summary",
+            "Copied" => zh ? "已複製" : "Copied",
             _ => key
         };
     }
-
-    private static IReadOnlyList<string> BuildEvidence(SupportDiagnosticReport report, string? language)
-    {
-        if (!ReportLanguage.IsTraditionalChinese(language))
-        {
-            return report.Assessment.EvidenceHighlights;
-        }
-
-        var route = report.PrimaryRoute;
-        var failedDns = report.DnsResults.Where(static result => !result.Success).ToArray();
-        var failedTcp = report.TcpResults.Where(static result => !result.Success).ToArray();
-        var firstSpike = route.Hops.FirstOrDefault(static hop => hop.SuspectedSpike);
-        var evidence = new List<string>
-        {
-            $"Ping 成功率: {route.PingSummary.SuccessRatePercent}% ，平均延遲 {route.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms。"
-        };
-
-        if (route.PingSummary.PacketLossPercent > 0)
-        {
-            evidence.Add($"偵測到封包遺失: {route.PingSummary.PacketLossPercent}% 。");
-        }
-        else
-        {
-            evidence.Add("沒有看到端對端封包遺失。");
-        }
-
-        if (firstSpike is not null)
-        {
-            evidence.Add($"延遲階梯從第 {firstSpike.HopNumber} 跳開始（{GetHopScopeLabel(firstSpike, language)}）。");
-        }
-
-        if (route.Hops.Any(static hop => hop.IsTimeout))
-        {
-            evidence.Add("一個或多個 traceroute hop 未回應。");
-        }
-
-        if (report.DnsResults.Count > 0)
-        {
-            evidence.Add($"DNS 檢查通過: {report.DnsResults.Count - failedDns.Length}/{report.DnsResults.Count}。");
-        }
-
-        if (failedDns.Length > 0)
-        {
-            evidence.Add($"DNS 失敗項目: {string.Join("、", failedDns.Select(static result => result.Name))}。");
-        }
-
-        if (report.TcpResults.Count > 0)
-        {
-            evidence.Add($"TCP 檢查通過: {report.TcpResults.Count - failedTcp.Length}/{report.TcpResults.Count}。");
-        }
-
-        if (failedTcp.Length > 0)
-        {
-            evidence.Add($"TCP 失敗端點: {string.Join("、", failedTcp.Select(static result => $"{result.Name} ({result.Host}:{result.Port})"))}。");
-        }
-
-        return evidence;
-    }
-
-    private static string? LocalizeSuspectedIssue(RouteDiagnosticReport route)
-    {
-        if (string.IsNullOrWhiteSpace(route.SuspectedIssue))
-        {
-            return null;
-        }
-
-        if (route.SuspectedIssue.StartsWith("Unable to start traceroute command:", StringComparison.Ordinal))
-        {
-            return $"無法啟動 traceroute 指令: {route.SuspectedIssue["Unable to start traceroute command:".Length..].Trim()}";
-        }
-
-        if (route.SuspectedIssue.StartsWith("Traceroute command timed out", StringComparison.Ordinal))
-        {
-            return "traceroute 指令執行逾時。";
-        }
-
-        if (route.SuspectedIssue.Equals("Traceroute returned no parsable hops", StringComparison.Ordinal))
-        {
-            return "traceroute 沒有產生可解析的 hop。";
-        }
-
-        var match = LatencyIncreaseRegex().Match(route.SuspectedIssue);
-        if (match.Success)
-        {
-            return $"延遲從第 {match.Groups["hop"].Value} 跳開始明顯上升";
-        }
-
-        if (route.SuspectedIssue.Equals("Packet loss is elevated across the full path", StringComparison.Ordinal))
-        {
-            return "整條路徑的封包遺失偏高";
-        }
-
-        if (route.SuspectedIssue.Equals("One or more hops timed out, but timeout-only signals are inconclusive", StringComparison.Ordinal))
-        {
-            return "有一個或多個 hop 超時，但僅靠 timeout 還不足以直接判定故障域";
-        }
-
-        return route.SuspectedIssue;
-    }
-
-    private static string BuildRouteStatusSummary(RouteDiagnosticReport route, string? localizedIssue, string? language)
-    {
-        if (!ReportLanguage.IsTraditionalChinese(language))
-        {
-            return route.StatusSummary;
-        }
-
-        return route.StatusLabel switch
-        {
-            "Critical" => "封包遺失已高到足以懷疑端到端連線問題。",
-            "Investigate" when !string.IsNullOrWhiteSpace(localizedIssue) => localizedIssue,
-            "Investigate" => "這條路徑的訊號雜訊偏高或資訊不完整，需要再深入檢查。",
-            "Observe" when route.Hops.Any(static hop => hop.IsTimeout) => "有些 hop 沒有回應，建議先重跑一次，再判斷 timeout 是否真的是故障點。",
-            "Observe" when route.PingSummary.PacketLossPercent > 0 => "路徑大致可達，但輕微封包遺失或單一延遲跳升值得持續觀察。",
-            _ => "目前路徑看起來整體穩定，沒有看到明顯瓶頸訊號。"
-        };
-    }
-
-    private static string BuildRouteNarrative(RouteDiagnosticReport route, string? localizedIssue, string? language)
-    {
-        if (!ReportLanguage.IsTraditionalChinese(language))
-        {
-            return route.Narrative;
-        }
-
-        if (!string.IsNullOrWhiteSpace(route.SuspectedIssue) && route.SuspectedIssue.StartsWith("Unable to start traceroute command:", StringComparison.Ordinal))
-        {
-            return $"Ping 已完成，但 traceroute 指令執行失敗: {route.SuspectedIssue["Unable to start traceroute command:".Length..].Trim()}。請確認本機有可用的 traceroute 工具後再試。";
-        }
-
-        if (route.Hops.Count == 0)
-        {
-            return "這次執行沒有產生可解析的 hop。可能是目標端過濾回應，或 traceroute 輸出格式與目前解析器不一致。";
-        }
-
-        if (!string.IsNullOrWhiteSpace(localizedIssue))
-        {
-            return $"目前平均 Ping 為 {route.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，主要訊號是: {localizedIssue}。建議在不同時間多跑幾次，確認這個型態是否穩定存在。";
-        }
-
-        return $"目前平均 Ping 為 {route.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms，這次路徑沒有看到足以直接判定問題的明顯階梯。若體感仍然不穩，建議在問題發生當下再重跑一次，並和其他網路或應用端資訊一起比對。";
-    }
-
-    [GeneratedRegex(@"Latency increases noticeably from hop (?<hop>\d+)", RegexOptions.CultureInvariant)]
-    private static partial Regex LatencyIncreaseRegex();
 }
-
-public readonly record struct LocalizedAssessmentView(
-    string OverallStatusLabel,
-    string FaultDomain,
-    string UserSummary,
-    string ItSummary,
-    IReadOnlyList<string> EvidenceHighlights,
-    IReadOnlyList<string> Recommendations);
-
-public readonly record struct LocalizedRouteView(
-    string StatusLabel,
-    string StatusSummary,
-    string Narrative,
-    string? SuspectedIssue);

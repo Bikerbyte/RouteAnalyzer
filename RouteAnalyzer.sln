@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
@@ -8,6 +8,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RouteAnalyzer.Cli", "RouteAnalyzer.Cli\RouteAnalyzer.Cli.csproj", "{1CB99335-46BD-4468-B84F-FB8C6EF38946}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RouteAnalyzer.Tests", "RouteAnalyzer.Tests\RouteAnalyzer.Tests.csproj", "{97DAD961-78D4-4D7C-B0C5-E2C520F03EEB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RouteAnalyzer.App", "RouteAnalyzer.App\RouteAnalyzer.App.csproj", "{971086BE-8A42-498E-B443-8A05335C0234}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -55,6 +57,18 @@ Global
 		{97DAD961-78D4-4D7C-B0C5-E2C520F03EEB}.Release|x64.Build.0 = Release|Any CPU
 		{97DAD961-78D4-4D7C-B0C5-E2C520F03EEB}.Release|x86.ActiveCfg = Release|Any CPU
 		{97DAD961-78D4-4D7C-B0C5-E2C520F03EEB}.Release|x86.Build.0 = Release|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Debug|x64.Build.0 = Debug|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Debug|x86.Build.0 = Debug|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Release|Any CPU.Build.0 = Release|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Release|x64.ActiveCfg = Release|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Release|x64.Build.0 = Release|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Release|x86.ActiveCfg = Release|Any CPU
+		{971086BE-8A42-498E-B443-8A05335C0234}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

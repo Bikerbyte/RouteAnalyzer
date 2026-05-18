@@ -164,34 +164,23 @@ internal static class CliApplication
 
         builder.AppendLine("Route Analyzer");
         builder.AppendLine("--------------");
-        builder.AppendLine($"Status      : {report.Assessment.OverallStatusLabel}");
-        builder.AppendLine($"Possible    : {report.Assessment.FaultDomain}");
+        builder.AppendLine($"Capture     : {report.SignalSummary.CaptureStatusLabel}");
         builder.AppendLine($"Target      : {report.Profile.TargetHost}");
         builder.AppendLine($"Ping Avg    : {report.PrimaryRoute.PingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms");
         builder.AppendLine($"Packet Loss : {report.PrimaryRoute.PingSummary.PacketLossPercent}%");
         builder.AppendLine($"DNS         : {(report.DnsResults.Count == 0 ? "n/a" : $"{dnsPassed}/{report.DnsResults.Count} pass")}");
         builder.AppendLine($"TCP         : {(report.TcpResults.Count == 0 ? "n/a" : $"{tcpPassed}/{report.TcpResults.Count} pass")}");
         builder.AppendLine();
-        builder.AppendLine(report.Assessment.UserSummary);
+        builder.AppendLine(report.SignalSummary.Overview);
 
-        var highlightedSignals = report.Assessment.EvidenceHighlights.Take(2).ToArray();
+        var highlightedSignals = report.SignalSummary.Signals.Take(4).ToArray();
         if (highlightedSignals.Length > 0)
         {
             builder.AppendLine();
-            builder.AppendLine("Observations:");
+            builder.AppendLine("Signals:");
             foreach (var signal in highlightedSignals)
             {
                 builder.AppendLine($"- {signal}");
-            }
-        }
-
-        if (report.Assessment.Recommendations.Count > 0)
-        {
-            builder.AppendLine();
-            builder.AppendLine("Next steps:");
-            foreach (var recommendation in report.Assessment.Recommendations.Take(3))
-            {
-                builder.AppendLine($"- {recommendation}");
             }
         }
 

@@ -89,14 +89,10 @@ public partial class NetworkRouteDiagnosticService
                     PacketLossPercent = 100
                 },
                 Hops = [],
-                Narrative = "The current platform is not yet wired for traceroute command execution.",
-                StatusLabel = "Unsupported",
-                StatusSummary = "Route analysis is available, but traceroute integration is not configured for this platform.",
                 RuntimeSummary = BuildRuntimeSummary(),
                 DiagnosticMode = "Unsupported platform",
                 TracerouteCommand = "n/a",
                 GeoDataProvider = GeoDataProvider,
-                SuspectedIssue = "Unsupported platform",
                 RawTracerouteLines = []
             };
         }
@@ -110,19 +106,14 @@ public partial class NetworkRouteDiagnosticService
             request.IncludeGeoDetails,
             cancellationToken);
 
-        var suspectedIssue = FindSuspectedIssue(hops, pingSummary, tracerouteResult.StartErrorMessage);
-        var statusLabel = DetermineStatusLabel(hops, pingSummary, tracerouteResult.StartErrorMessage);
-        var statusSummary = BuildStatusSummary(statusLabel, hops, pingSummary, suspectedIssue, tracerouteResult.StartErrorMessage);
-
         stopwatch.Stop();
 
         _logger.LogInformation(
-            "Completed route analysis for {TargetHost} in {DurationMs} ms with {HopCount} hops, {PacketLossPercent}% packet loss, status {StatusLabel}",
+            "Completed route analysis for {TargetHost} in {DurationMs} ms with {HopCount} hops and {PacketLossPercent}% packet loss",
             request.TargetHost,
             stopwatch.ElapsedMilliseconds,
             hops.Count,
-            pingSummary.PacketLossPercent,
-            statusLabel);
+            pingSummary.PacketLossPercent);
 
         return new RouteDiagnosticReport
         {
@@ -134,14 +125,10 @@ public partial class NetworkRouteDiagnosticService
             DurationMs = stopwatch.ElapsedMilliseconds,
             PingSummary = pingSummary,
             Hops = hops,
-            SuspectedIssue = suspectedIssue,
-            StatusLabel = statusLabel,
-            StatusSummary = statusSummary,
             RuntimeSummary = BuildRuntimeSummary(),
             DiagnosticMode = tracerouteSpec.ModeLabel,
             TracerouteCommand = tracerouteResult.CommandDisplay,
             GeoDataProvider = GeoDataProvider,
-            Narrative = BuildNarrative(pingSummary, hops, suspectedIssue, tracerouteResult.StartErrorMessage),
             RawTracerouteLines = tracerouteResult.Lines
         };
     }
@@ -505,113 +492,6 @@ public partial class NetworkRouteDiagnosticService
                    (100, >= 64 and <= 127) => true,
                    _ => false
                };
-    }
-
-    private static string? FindSuspectedIssue(IReadOnlyList<RouteHop> hops, PingSummary pingSummary, string? tracerouteError)
-    {
-        if (!string.IsNullOrWhiteSpace(tracerouteError))
-        {
-            return tracerouteError;
-        }
-
-        if (hops.Count == 0)
-        {
-            return "Traceroute returned no parsable hops";
-        }
-
-        var spike = hops.FirstOrDefault(static hop => hop.SuspectedSpike);
-        if (spike is not null)
-        {
-            return $"Latency increases noticeably from hop {spike.HopNumber}";
-        }
-
-        if (pingSummary.PacketLossPercent >= 25)
-        {
-            return "Packet loss is elevated across the full path";
-        }
-
-        if (hops.Any(static hop => hop.IsTimeout))
-        {
-            return "One or more hops timed out, but timeout-only signals are inconclusive";
-        }
-
-        return null;
-    }
-
-    private static string BuildNarrative(PingSummary pingSummary, IReadOnlyList<RouteHop> hops, string? suspectedIssue, string? tracerouteError)
-    {
-        if (!string.IsNullOrWhiteSpace(tracerouteError))
-        {
-            return $"Ping completed, but traceroute command execution failed: {tracerouteError}. Ensure traceroute tooling is available on this host and retry.";
-        }
-
-        if (hops.Count == 0)
-        {
-            return "This run did not produce any parsable hops. The target may be filtering responses, or the traceroute output format differed from what the parser expects.";
-        }
-
-        if (!string.IsNullOrWhiteSpace(suspectedIssue))
-        {
-            return $"Average ping is {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms and the primary signal is: {suspectedIssue}. Compare with repeated runs across different times to confirm whether the behavior is stable.";
-        }
-
-        return $"Average ping is {pingSummary.AverageRoundTripMs?.ToString() ?? "-"} ms and this path does not show a clear step-up that would justify a network-side conclusion from a single capture. If the slowdown still happens, re-run during the issue window and compare with another network or app-side evidence.";
-    }
-
-    private static string DetermineStatusLabel(IReadOnlyList<RouteHop> hops, PingSummary pingSummary, string? tracerouteError)
-    {
-        if (!string.IsNullOrWhiteSpace(tracerouteError))
-        {
-            return "Investigate";
-        }
-
-        var spikeCount = hops.Count(static hop => hop.SuspectedSpike);
-        var timeoutCount = hops.Count(static hop => hop.IsTimeout);
-
-        if (hops.Count == 0)
-        {
-            return "Investigate";
-        }
-
-        if (pingSummary.PacketLossPercent >= 40)
-        {
-            return "Critical";
-        }
-
-        if (pingSummary.PacketLossPercent >= 15 || spikeCount >= 2)
-        {
-            return "Investigate";
-        }
-
-        if (pingSummary.PacketLossPercent > 0 || timeoutCount > 0 || spikeCount == 1)
-        {
-            return "Observe";
-        }
-
-        return "Stable";
-    }
-
-    private static string BuildStatusSummary(
-        string statusLabel,
-        IReadOnlyList<RouteHop> hops,
-        PingSummary pingSummary,
-        string? suspectedIssue,
-        string? tracerouteError)
-    {
-        if (!string.IsNullOrWhiteSpace(tracerouteError))
-        {
-            return $"Traceroute command failed: {tracerouteError}";
-        }
-
-        return statusLabel switch
-        {
-            "Critical" => "Packet loss is high enough to suggest an end-to-end connectivity problem.",
-            "Investigate" when !string.IsNullOrWhiteSpace(suspectedIssue) => suspectedIssue,
-            "Investigate" => "The path needs a closer look because the signal is noisy or incomplete.",
-            "Observe" when hops.Any(static hop => hop.IsTimeout) => "Some hops did not reply. Re-run before treating a timeout as the actual fault domain.",
-            "Observe" when pingSummary.PacketLossPercent > 0 => "The path is mostly reachable, but light loss or a single latency jump is worth monitoring.",
-            _ => "The current path looks consistent and no strong bottleneck signal stands out."
-        };
     }
 
     private static string BuildRuntimeSummary()

@@ -18,12 +18,6 @@ public sealed class RouteDiagnosticReport
 
     public required IReadOnlyList<RouteHop> Hops { get; init; }
 
-    public required string Narrative { get; init; }
-
-    public required string StatusLabel { get; init; }
-
-    public required string StatusSummary { get; init; }
-
     public required string RuntimeSummary { get; init; }
 
     public required string DiagnosticMode { get; init; }
@@ -31,8 +25,6 @@ public sealed class RouteDiagnosticReport
     public required string TracerouteCommand { get; init; }
 
     public required string GeoDataProvider { get; init; }
-
-    public string? SuspectedIssue { get; init; }
 
     public required IReadOnlyList<string> RawTracerouteLines { get; init; }
 }
