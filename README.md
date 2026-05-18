@@ -1,12 +1,6 @@
 # Route Analyzer
 
-一個 local-first 網路路徑診斷工具。
-當 user 回報「連線很慢」「VPN 很卡」「網站連不上」時，可以直接開本機診斷台，輸入目標後取得可轉交給 support / IT 的判讀、路徑圖、下一步建議與完整報告。
-
-目前專案分成兩個入口：
-
-- `RouteAnalyzer.App`：主要使用入口，提供本機 web UI 與互動式診斷流程。
-- `RouteAnalyzer.Cli`：進階 / 自動化入口，保留 profile-driven 與 headless report bundle 流程。
+一個 client-side 網路狀態診斷工具，在 client-side 收集診斷報告。
 
 ## Demo
 - 成功範例
