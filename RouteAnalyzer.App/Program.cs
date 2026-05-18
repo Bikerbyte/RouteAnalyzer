@@ -70,6 +70,17 @@ diagnostics.MapPost("/run", async (
     }
 });
 
+app.MapPost("/api/app/shutdown", (IHostApplicationLifetime lifetime) =>
+{
+    _ = Task.Run(async () =>
+    {
+        await Task.Delay(250);
+        lifetime.StopApplication();
+    });
+
+    return Results.Ok(new { message = "Route Analyzer is shutting down." });
+});
+
 OpenBrowserWhenReady(app, args);
 
 app.Run();

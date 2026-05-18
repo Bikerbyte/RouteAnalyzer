@@ -13,8 +13,11 @@ Route Analyzer 不負責猜測「誰的網路壞了」。它只快速收集可�
 3. 瀏覽器會自動開啟本機檢測頁。
 4. 輸入目標，例如 `vpn.company.com`、`github.com`、`1.1.1.1`。
 5. 按 `Run diagnostic`。
+6. 用完後按右上角 `Close app`，本機 server 會關閉並釋放 port。
 
 檢測結果會存在 exe 同層的 `reports/app/<report-id>/`。
+
+如果只關掉瀏覽器 tab，`RouteAnalyzer.exe` 仍可能在背景繼續執行。再次雙擊時如果預設 port 被占用，app 會自動改用另一個可用 localhost port。
 
 ## 畫面
 

@@ -89,6 +89,19 @@ a {
   font-size: 14px;
 }
 
+.close-app-button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.close-app-button:hover {
+  border-color: var(--charcoal);
+}
+
 .status-dot {
   width: 9px;
   height: 9px;
@@ -510,6 +523,27 @@ textarea {
 
 .button-row {
   margin-top: 12px;
+}
+
+.shutdown-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.shutdown-screen section {
+  max-width: 560px;
+}
+
+.shutdown-screen h1 {
+  max-width: none;
+}
+
+.shutdown-screen p {
+  margin-top: 12px;
+  color: var(--muted);
 }
 
 @media (max-width: 980px) {

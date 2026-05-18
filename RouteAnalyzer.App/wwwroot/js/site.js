@@ -69,6 +69,25 @@ if (form) {
       button.textContent = original;
     }, 1200);
   });
+
+  document.querySelector("#shutdown-button")?.addEventListener("click", async () => {
+    const confirmed = window.confirm("Close Route Analyzer?");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await fetch("/api/app/shutdown", { method: "POST" });
+    } finally {
+      document.body.innerHTML = `
+        <main class="shutdown-screen">
+          <section>
+            <h1>Route Analyzer closed.</h1>
+            <p>You can close this browser tab now.</p>
+          </section>
+        </main>`;
+    }
+  });
 }
 
 function renderResult(payload) {
