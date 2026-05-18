@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
+using System.Text;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.FileProviders;
@@ -36,10 +38,8 @@ Directory.CreateDirectory(reportRoot);
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    app.UseHsts();
 }
 
-app.UseHttpsRedirection();
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(reportRoot),
@@ -49,9 +49,9 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseRouting();
 app.UseAuthorization();
 
-app.MapStaticAssets();
-app.MapRazorPages()
-   .WithStaticAssets();
+app.MapGet("/assets/site.css", () => Results.Text(ReadEmbeddedAsset("RouteAnalyzer.App.Assets.site.css"), "text/css; charset=utf-8"));
+app.MapGet("/assets/site.js", () => Results.Text(ReadEmbeddedAsset("RouteAnalyzer.App.Assets.site.js"), "application/javascript; charset=utf-8"));
+app.MapRazorPages();
 
 var diagnostics = app.MapGroup("/api/diagnostics");
 diagnostics.MapPost("/run", async (
@@ -160,4 +160,13 @@ static void TryOpenBrowser(string url)
     {
         Console.WriteLine($"Route Analyzer is ready: {url}");
     }
+}
+
+static string ReadEmbeddedAsset(string logicalName)
+{
+    var assembly = Assembly.GetExecutingAssembly();
+    using var stream = assembly.GetManifestResourceStream(logicalName)
+        ?? throw new InvalidOperationException($"Embedded asset not found: {logicalName}");
+    using var reader = new StreamReader(stream, Encoding.UTF8);
+    return reader.ReadToEnd();
 }

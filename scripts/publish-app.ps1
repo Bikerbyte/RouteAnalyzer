@@ -4,10 +4,26 @@ param(
     [string]$Configuration = 'Release'
 )
 
+$ErrorActionPreference = 'Stop'
+
 $project = Join-Path $PSScriptRoot '..\RouteAnalyzer.App\RouteAnalyzer.App.csproj'
+$stagingDir = Join-Path $PSScriptRoot "..\artifacts\publish-staging\app\$Runtime"
 $outDir = Join-Path $PSScriptRoot "..\artifacts\app\$Runtime"
+$isWindowsRuntime = $Runtime.StartsWith('win-')
+$publishedName = if ($isWindowsRuntime) { 'RouteAnalyzer.App.exe' } else { 'RouteAnalyzer.App' }
+$finalName = if ($isWindowsRuntime) { 'RouteAnalyzer.exe' } else { 'RouteAnalyzer' }
 
 Write-Host "Publishing RouteAnalyzer.App for $Runtime ..."
+
+if (Test-Path -LiteralPath $stagingDir)
+{
+    Remove-Item -LiteralPath $stagingDir -Recurse -Force
+}
+
+if (Test-Path -LiteralPath $outDir)
+{
+    Remove-Item -LiteralPath $outDir -Recurse -Force
+}
 
 dotnet publish $project `
     -c $Configuration `
@@ -18,41 +34,14 @@ dotnet publish $project `
     /p:DebugSymbols=false `
     /p:DebugType=None `
     /p:IncludeNativeLibrariesForSelfExtract=true `
-    -o $outDir
+    -o $stagingDir
 
 if ($LASTEXITCODE -ne 0)
 {
     exit $LASTEXITCODE
 }
 
-Get-ChildItem -LiteralPath $outDir -Filter '*.pdb' -ErrorAction SilentlyContinue |
-    Remove-Item -Force
-Remove-Item -LiteralPath (Join-Path $outDir 'appsettings.Development.json') -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+Copy-Item -LiteralPath (Join-Path $stagingDir $publishedName) -Destination (Join-Path $outDir $finalName) -Force
 
-if ($Runtime.StartsWith('win-'))
-{
-    $launcherPath = Join-Path $outDir 'Start-RouteAnalyzer.cmd'
-    @'
-@echo off
-cd /d "%~dp0"
-start "Route Analyzer" "%~dp0RouteAnalyzer.App.exe"
-'@ | Set-Content -LiteralPath $launcherPath -Encoding ASCII
-}
-
-$readmePath = Join-Path $outDir 'README-FIRST.txt'
-@'
-Route Analyzer
-==============
-
-Windows:
-1. Double-click Start-RouteAnalyzer.cmd or RouteAnalyzer.App.exe.
-2. The browser opens automatically.
-3. Enter a target and run the diagnostic.
-4. Full reports are saved under reports/app next to the app package.
-
-Advanced:
-- Use --no-open to start without opening a browser.
-- Use --urls http://127.0.0.1:5015 to force a fixed URL.
-'@ | Set-Content -LiteralPath $readmePath -Encoding UTF8
-
-Write-Host "App published to $outDir"
+Write-Host "Single-file app published to $(Join-Path $outDir $finalName)"

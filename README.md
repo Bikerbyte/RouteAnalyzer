@@ -2,19 +2,29 @@
 
 輕量的 local-first 網路檢測與視覺化工具。
 
-它的定位不是判斷「誰的網路壞了」，而是快速收集事實訊號：ping、packet loss、DNS、TCP、traceroute hops、本機網卡資訊，然後整理成可以交給 support / IT 的 snapshot。
+Route Analyzer 不負責猜測「誰的網路壞了」。它只快速收集可檢查、可轉交、可重跑的事實訊號：ping、packet loss、DNS、TCP、traceroute hops、本機網卡資訊，然後整理成一份支援用 snapshot。
 
-## 給使用者
+## 使用方式
 
-使用者不需要安裝 .NET，也不需要 `dotnet build`。
+使用者不需要安裝 .NET，不需要打指令，也不需要 `dotnet build`。
 
-1. 從 GitHub Release 下載 `RouteAnalyzer.App-win-x64.zip`。
-2. 解壓縮整個資料夾。
-3. 雙擊 `Start-RouteAnalyzer.cmd` 或 `RouteAnalyzer.App.exe`。
-4. 瀏覽器會自動開啟本機診斷頁。
-5. 輸入目標，例如 `vpn.company.com`、`github.com`、`1.1.1.1`，按 Run diagnostic。
+1. 從 GitHub Release 下載 `RouteAnalyzer.exe`。
+2. 雙擊 `RouteAnalyzer.exe`。
+3. 瀏覽器會自動開啟本機檢測頁。
+4. 輸入目標，例如 `vpn.company.com`、`github.com`、`1.1.1.1`。
+5. 按 `Run diagnostic`。
 
-檢測結果會存在 app 同層的 `reports/app/<report-id>/`。
+檢測結果會存在 exe 同層的 `reports/app/<report-id>/`。
+
+## 畫面
+
+啟動後直接進入檢測畫面：
+
+![Route Analyzer home](screenshots/routeanalyzer-home.png)
+
+完成後會看到 connection snapshot、route shape、captured signals，以及可複製給 support / IT 的摘要：
+
+![Route Analyzer result](screenshots/routeanalyzer-result.png)
 
 ## App 會檢測什麼
 
@@ -30,23 +40,23 @@
 
 Route Analyzer 不做 rule-based fault domain 判斷。
 
-它不會宣稱問題一定是 Wi-Fi、ISP、transit 或目的端服務。這些結論很容易不準，也很難維護。工具只呈現可檢查、可轉交、可重跑的檢測訊號。
+它不會宣稱問題一定是 Wi-Fi、ISP、transit 或目的端服務。這些結論很容易不準，也很難維護。工具只呈現檢測訊號。
 
 ## 給維護者
 
-本機產生 Windows portable app：
+本機產生單一 Windows app：
 
 ```powershell
 ./scripts/publish-app.ps1 -Runtime win-x64 -Configuration Release
 ```
 
-輸出位置：
+輸出：
 
 ```text
-artifacts/app/win-x64
+artifacts/app/win-x64/RouteAnalyzer.exe
 ```
 
-GitHub Actions 也可以手動執行 `Publish portable app` workflow 產生下載 artifact。推 `v*` tag 時會把 zip 放到 GitHub Release。
+GitHub Actions 也可以手動執行 `Publish portable app` workflow。推 `v*` tag 時會把 `RouteAnalyzer.exe` 放到 GitHub Release。
 
 ## 開發
 
@@ -59,12 +69,6 @@ dotnet test RouteAnalyzer.sln
 
 ```powershell
 dotnet run --project RouteAnalyzer.App --urls http://localhost:5015
-```
-
-開啟：
-
-```text
-http://localhost:5015
 ```
 
 ## CLI
@@ -88,20 +92,3 @@ RouteAnalyzer.Cli.exe --target github.com
 ```powershell
 RouteAnalyzer.Cli.exe --create-sample-profile
 ```
-
-常用參數：
-
-- `--profile-file <path>`
-- `--target <value>`
-- `--ping-count <3-10>`
-- `--max-hops <4-64>`
-- `--format <bundle|text|json|csv|html>`
-- `--output <path>`
-- `--report-dir <path>`
-- `--console-only`
-- `--language <en|zh-TW>`
-- `--create-sample-profile [path]`
-- `--force`
-- `--no-geo`
-- `--no-open`
-- `--help`
